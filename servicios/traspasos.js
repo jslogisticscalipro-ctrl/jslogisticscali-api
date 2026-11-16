@@ -12,7 +12,7 @@ import * as Recogida from "../models/recogidaPatinador.model.js";
 import { HttpError } from "../helpers/errores.js";
 import { enTransaccion, actualizar } from "./transaccion.js";
 import { registrar } from "./historial.js";
-import { noEncontrado, permisoNegado, conflicto } from "./errores.js";
+import { datosInvalidos, noEncontrado, permisoNegado, conflicto } from "./errores.js";
 import { exigirOficina } from "./contexto.js";
 
 // Sin I, L, O ni U: no se confunden al leerlos o escribirlos a mano.
@@ -30,7 +30,19 @@ const CODIGO_MALO = () => new HttpError(400, "CODIGO_INVALIDO", "Ese código no 
 
 const esPatinador = a => a?.rol === "patinador";
 const exigirPatinadorUOficina = a => { if (!esPatinador(a) && !a?.esOficina) throw permisoNegado(); };
-const exigirMensajero = a => { if (a?.rol !== "mensajero" || !a.mensajeroId) throw permisoNegado("Solo un mensajero con su nombre vinculado en Personal puede recibir un paquete por QR."); };
+/** Quién recibe el paquete: el mensajero que hace la petición o, si es la oficina (modo Mensajero de la app), el que elija. */
+function quienRecibe(a, mensajeroIdElegido) {
+  if (a?.rol === "mensajero") {
+    if (!a.mensajeroId) throw permisoNegado("Tu cuenta no está vinculada con tu nombre en Personal. Pídele a administración que la vincule.");
+    if (mensajeroIdElegido && mensajeroIdElegido !== a.mensajeroId) throw datosInvalidos("Solo administración puede recibir un paquete a nombre de otro mensajero.");
+    return a.mensajeroId;
+  }
+  if (a?.esOficina) {
+    if (!mensajeroIdElegido) throw datosInvalidos("Elige el mensajero que recibe el paquete.");
+    return mensajeroIdElegido;
+  }
+  throw permisoNegado("Tu cuenta no puede recibir paquetes por QR. Entra con tu cuenta de mensajero.");
+}
 
 async function guiaDeRecogida(t, guia) {
   const p = await Pedidos.obtener(t.c, guia, { bloquear: true });
@@ -102,13 +114,12 @@ async function resolver(t, codigoCrudo) {
 }
 
 /** Lo que el mensajero ve antes de confirmar. Solo lo mínimo para reconocer el paquete: nada de teléfonos. */
-export async function vistaPrevia(ctx, codigoCrudo) {
-  const a = ctx.actor;
-  exigirMensajero(a);
+export async function vistaPrevia(ctx, codigoCrudo, mensajeroIdElegido) {
+  const a = ctx.actor, quien = quienRecibe(a, mensajeroIdElegido);
   return enTransaccion(ctx, async t => {
     const { fila, p } = await resolver(t, codigoCrudo);
     if (fila.traspasadoEn) {
-      if (fila.traspasadoA === a.mensajeroId) return { ...(await resumen(t, p, fila)), yaEsTuyo: true };
+      if (fila.traspasadoA === quien) return { ...(await resumen(t, p, fila)), yaEsTuyo: true };
       throw yaLoTiene(await Mensajero.buscarPorId(fila.traspasadoA, t.c));
     }
     if (new Date(fila.codigoVence) <= new Date()) throw CODIGO_MALO();
@@ -129,23 +140,22 @@ async function resumen(t, p, fila) {
 }
 
 /** El mensajero se queda con el paquete. Escanear dos veces el mismo QR da el mismo resultado; otro mensajero recibe 409. */
-export async function canjear(ctx, codigoCrudo) {
-  const a = ctx.actor;
-  exigirMensajero(a);
+export async function canjear(ctx, codigoCrudo, mensajeroIdElegido) {
+  const a = ctx.actor, quien = quienRecibe(a, mensajeroIdElegido);
   return enTransaccion(ctx, async t => {
     const { fila, p } = await resolver(t, codigoCrudo);
     if (fila.traspasadoEn) {
-      if (fila.traspasadoA === a.mensajeroId) return { guia: fila.guia, yaEsTuyo: true };
+      if (fila.traspasadoA === quien) return { guia: fila.guia, yaEsTuyo: true };
       throw yaLoTiene(await Mensajero.buscarPorId(fila.traspasadoA, t.c));
     }
     if (new Date(fila.codigoVence) <= new Date()) throw CODIGO_MALO();
     if (!p || p.estado !== "aceptado" || p.mensajeroId !== fila.patinadorId) throw conflicto("Ese paquete cambió. Pídele a administración un QR nuevo.", undefined, "TRASPASO_CAMBIO");
-    const m = await Mensajero.buscarPorId(a.mensajeroId, t.c);
-    if (!m || !m.activo || m.tipo !== "mensajero") throw permisoNegado("Tu ficha no puede recibir paquetes. Pídele a administración que la revise.");
+    const m = await Mensajero.buscarPorId(quien, t.c);
+    if (!m || !m.activo || !["mensajero", "dueno", "oficina"].includes(m.tipo)) throw permisoNegado("Tu ficha no puede recibir paquetes. Pídele a administración que la revise.");
     await actualizar(t, "pedidos", p.guia, { mensajeroId: m.id }, { antes: p });
     await t.c.query(`UPDATE solicitudes SET mensajero_id = $2, actualizado = now() WHERE guia = $1`, [p.guia, m.id]);
     await Recogida.cerrar(t.c, { guia: p.guia, mensajeroId: m.id, uid: a.uid });
-    await registrar(t, `${m.nombre} recibió ${p.guia} del patinador por QR (ya la puede recoger con foto)`, { col: "pedidos", id: p.guia });
+    await registrar(t, `${m.nombre} recibió ${p.guia} del patinador por QR${a.rol === "mensajero" ? "" : " (lo registró " + a.nombre + ")"} (ya la puede recoger con foto)`, { col: "pedidos", id: p.guia });
     t.cambios.add("solicitudes");
     return { guia: p.guia, yaEsTuyo: false };
   });

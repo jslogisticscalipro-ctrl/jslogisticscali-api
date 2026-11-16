@@ -72,7 +72,7 @@ test("canjear: la guía existente pasa al mensajero, sigue por recoger y deja ra
   const guia = (await oficina.get("/api/patinador/recogidas")).body.data.find(x => x.direccionEntrega === "Calle 1 # 1-1").guia;
   const { codigo } = (await oficina.post(`/api/patinador/recogidas/${guia}/qr`)).body.qr;
   assert.equal((await patinador.post("/api/traspasos/canjear").send(cuerpo(codigo))).status, 403);
-  assert.equal((await oficina.post("/api/traspasos/canjear").send(cuerpo(codigo))).status, 403);
+  assert.equal((await oficina.post("/api/traspasos/canjear").send(cuerpo(codigo))).status, 400); // la oficina debe decir a nombre de quién
   const v = await carlos.post("/api/traspasos/vista-previa").send(cuerpo(codigo.toLowerCase().slice(0, 5) + "-" + codigo.slice(5)));
   assert.equal(v.status, 200);
   assert.equal(v.body.traspaso.guia, guia);
@@ -155,4 +155,22 @@ test("una guía que no es de un patinador o ya salió a la calle no se puede mar
   assert.equal((await oficina.post(`/api/patinador/solicitudes/${g}/recogido`)).status, 409);
   assert.equal((await patinador.post(`/api/patinador/solicitudes/JS-99999/recogido`)).status, 404);
   assert.equal((await patinador.post(`/api/patinador/solicitudes/xx/recogido`)).status, 400);
+});
+
+test("la oficina en modo Mensajero recibe a nombre del que elige; el mensajero no puede elegir a otro", async () => {
+  const guia = await guiaDelPatinador("Calle 8 # 8-8");
+  await patinador.post(`/api/patinador/solicitudes/${guia}/recogido`);
+  const { codigo } = (await oficina.post(`/api/patinador/recogidas/${guia}/qr`)).body.qr;
+  const sinElegir = await oficina.post("/api/traspasos/canjear").send(cuerpo(codigo));
+  assert.equal(sinElegir.status, 400);
+  assert.equal((await oficina.post("/api/traspasos/canjear").send({ codigo, mensajeroId: idPat })).status, 403); // un patinador no recibe
+  assert.equal((await carlos.post("/api/traspasos/canjear").send({ codigo, mensajeroId: idDiana })).status, 400);
+  assert.equal((await patinador.post("/api/traspasos/canjear").send(cuerpo(codigo))).status, 403);
+  assert.equal((await cliente.post("/api/traspasos/canjear").send(cuerpo(codigo))).status, 403);
+  assert.equal((await oficina.post("/api/traspasos/vista-previa").send({ codigo, mensajeroId: idDiana })).status, 200);
+  const r = await oficina.post("/api/traspasos/canjear").send({ codigo, mensajeroId: idDiana });
+  assert.equal(r.status, 200);
+  assert.equal((await pool.query(`SELECT mensajero_id FROM pedidos WHERE guia = $1`, [guia])).rows[0].mensajero_id, idDiana);
+  const h = await pool.query(`SELECT accion FROM historial WHERE registro = $1 AND accion LIKE '%por QR%'`, [guia]);
+  assert.match(h.rows[0].accion, /Diana Moto recibió/);
 });
