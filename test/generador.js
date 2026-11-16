@@ -1,4 +1,6 @@
 /* Datos de prueba variados (todos los tipos de pedido, movimiento y caja que maneja la app), siempre iguales para una semilla. */
+import { cerrado, diaSueldo, idSinDesc } from "../helpers/calculos.js";
+
 export function generarDatos(semilla = 7, ahora = Date.now()) {
   let x = semilla >>> 0;
   const rnd = () => ((x = (x * 1664525 + 1013904223) >>> 0) / 2 ** 32);
@@ -93,5 +95,11 @@ export function generarDatos(semilla = 7, ahora = Date.now()) {
   const semPrev = sabado(ahora - 14 * DIA);
   S.jornadas["m1_previo_" + semPrev] = { id: "m1_previo_" + semPrev, personaId: "m1", dia: semPrev, valor: 90000, previo: true };
   S.vinculos = { u1: { uid: "u1", mensajeroId: "m1" } };
+  // Días sin el descuento de $ 25.000 (al final, para no cambiar la secuencia aleatoria de arriba): días recientes en que
+  // el mensajero tiene pedidos cerrados, y uno en un día sin entregas, que no debe cambiar nada.
+  const diasCon = mid => [...new Set(Object.values(S.pedidos).filter(p => p.mensajeroId === mid && cerrado(p)).sort((a, b) => b.entregado - a.entregado).map(diaSueldo))];
+  const sinDesc = (pid, dia) => { const k = idSinDesc(pid, dia); S.jornadas[k] = { id: k, personaId: pid, dia, valor: 0, sinDescuento: true, nota: "Sin descuento de $ 25.000" }; };
+  for (const [mid, i] of [["m1", 0], ["m1", 2], ["m2", 1], ["m3", 0]]) { const d = diasCon(mid)[i]; if (d) sinDesc(mid, d); }
+  sinDesc("m2", new Date(desde - 5 * DIA).toLocaleDateString("en-CA", { timeZone: "America/Bogota" }));
   return S;
 }

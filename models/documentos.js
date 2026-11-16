@@ -288,11 +288,12 @@ export const Cajamovs = crearModelo({
 
 export const Cuentas = crearModelo({ col: "cuentas", pk: "id", campos: { id: "texto", nombre: "texto", tipo: "texto", creado: "ms!" } });
 
-/** Días de pago fijo y sueldo anterior al empalme. En los "previo", `dia` es el sábado en que empieza la semana. */
+/** Días de pago fijo, sueldo anterior al empalme y días sin el descuento de $ 25.000 de un mensajero.
+   En los "previo", `dia` es el sábado en que empieza la semana. Los "sinDescuento" tienen id `{personaId}_sindesc_{dia}` y valor 0. */
 export const Jornadas = crearModelo({
   col: "jornadas", pk: "id",
-  campos: { id: "texto", personaId: "ref", dia: "dia", semana: "ref", valor: "num", previo: "bool", nota: "texto" },
-  leer: d => { const { semana, ...x } = d; if (!x.dia && semana) x.dia = semana; if (!x.previo) delete x.previo; if (!x.nota) delete x.nota; return x; },
+  campos: { id: "texto", personaId: "ref", dia: "dia", semana: "ref", valor: "num", previo: "bool", sinDescuento: "bool", nota: "texto" },
+  leer: d => { const { semana, ...x } = d; if (!x.dia && semana) x.dia = semana; if (!x.previo) delete x.previo; if (!x.sinDescuento) delete x.sinDescuento; if (!x.nota) delete x.nota; return x; },
   alGuardar: d => { d.semana = d.previo ? d.dia : null; return d; }
 });
 

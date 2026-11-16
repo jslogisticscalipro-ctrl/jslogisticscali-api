@@ -351,7 +351,9 @@ Lo ya contado en un arqueo no se cambia: responde `409 YA_CONTADO` con el texto 
 | `GET /jornadas` | equipo (cada quien, lo suyo) | Días de pago fijo |
 | `PUT /jornadas/:id`, `DELETE /jornadas/:id` | admin | `{ personaId, dia, valor, previo? }`. El ID lo arma el servidor |
 | `GET /sueldos/semana?semana=` | admin | Planilla de la semana |
-| `GET /sueldos/mensajeros/:id?semana=` | admin; el mensajero, el suyo | "Mi sueldo" |
+| `GET /sueldos/mensajeros/:id?semana=` | admin; el mensajero, el suyo | "Mi sueldo". Cada día de `porDia` trae `sinDescuento` |
+| `PUT /sueldos/sin-descuento/:personaId/:dia` | admin | Ese día el mensajero gana el 70 % completo, sin el descuento de $ 25.000, y esos $ 25.000 no suman al sueldo del dueño. Solo mensajeros y días que ya llegaron. Guarda la jornada `{personaId}_sindesc_{dia}`; si ya existe, la devuelve. La planilla de la semana trae `sinDescuento` por día en cada fila |
+| `DELETE /sueldos/sin-descuento/:personaId/:dia` | admin | Quita la marca: ese día vuelve a descontarse. Devuelve `{ quitado }` |
 | `GET /historial?desde=&buscar=&pagina=&porPagina=` | equipo (admin todo; los demás, lo suyo) | Página del historial. Devuelve `{ cambios: [{ id, fecha, quien, op, col, docId, resumen }], pagina, porPagina, total, paginas }`; la app usa 5 en celular y 13 en computador. Sin `pagina`/`porPagina` mantiene el tope antiguo (`limite`, 600) |
 | `POST /historial` | equipo | `{ texto }`: anota algo (por ejemplo, "Envió saldo por WhatsApp") |
 | `GET /papelera`, `POST /papelera/:id/restaurar`, `DELETE /papelera/:id`, `DELETE /papelera` | admin | Papelera. Un pedido vuelve con sus intentos y sus fotos |

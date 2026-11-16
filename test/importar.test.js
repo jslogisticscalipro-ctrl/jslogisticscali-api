@@ -299,3 +299,24 @@ test("volver a importar no deshace lo que administración configuró en el siste
     assert.equal((await uno(`SELECT mensajero_id FROM usuarios WHERE id = 'uAdmin'`)).mensajero_id, "m1", `reemplazar=${reemplazar}`);
   }
 });
+
+test("un día sin el descuento de $ 25.000 de la app vieja llega con sin_descuento y se lee igual", async () => {
+  const { cargarEstado } = await import("../models/documentos.js");
+  const { crearCalculos } = await import("../helpers/calculos.js");
+  await reiniciarBase();
+  const datos = exportacion();
+  const doc = { personaId: "m1", dia: "2026-10-20", valor: 0, sinDescuento: true, nota: "Sin descuento de $ 25.000" };
+  datos.jornadas.push({ id: "m1_sindesc_2026-10-20", datos: doc });
+  await escribir(datos);
+  await importar({ carpeta, conFotos: false, log: silencio });
+  const fila = await uno(`SELECT persona_id, dia::text AS dia, valor, previo, sin_descuento, nota FROM jornadas WHERE id = 'm1_sindesc_2026-10-20'`);
+  assert.deepEqual(fila, { persona_id: "m1", dia: "2026-10-20", valor: 0, previo: false, sin_descuento: true, nota: "Sin descuento de $ 25.000" });
+  assert.equal((await uno(`SELECT sin_descuento FROM jornadas WHERE id = 'm2_2026-10-20'`)).sin_descuento, null); // las demás no cambian
+  const S = await cargarEstado(pool, ["jornadas", "pedidos", "mensajeros", "movimientos"]);
+  assert.deepEqual(S.jornadas["m1_sindesc_2026-10-20"], { id: "m1_sindesc_2026-10-20", ...doc });
+  const calc = crearCalculos(S);
+  assert.equal(calc.sinDescuento("m1", "2026-10-20"), true);
+  assert.equal(Math.round(calc.sueldosDia("2026-10-20").res.m1), 5600); // 70 % de 8.000, sin restar los 25.000
+  // Esta exportación trae datos sucios a propósito; aquí solo importa que las jornadas lleguen todas.
+  assert.deepEqual((await verificar({ carpeta })).diferencias.filter(d => /jornada/i.test(d.dato)), []);
+});

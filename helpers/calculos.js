@@ -37,10 +37,12 @@ export const textoLiq = d => (d > 0 ? "Debe " + pesos(d) : d < 0 ? "Sobró " + p
 export const tipoDe = m => m?.tipo || "mensajero";
 export const esRepartidor = m => ["mensajero", "dueno", "oficina"].includes(tipoDe(m));
 export const ganaPorcentaje = m => tipoDe(m) === "mensajero";
-export const sueldoDe = domicilios => domicilios * PCT_SUELDO - DESC_SUELDO;
+/** Sueldo de un día. `sinDesc`: administración le quitó a ese día el descuento de $ 25.000 (jornada `{pid}_sindesc_{dia}`). */
+export const sueldoDe = (domicilios, sinDesc = false) => domicilios * PCT_SUELDO - (sinDesc ? 0 : DESC_SUELDO);
+export const idSinDesc = (pid, dia) => pid + "_sindesc_" + dia;
 /** El domicilio va al sueldo del día en que salió el pedido (desde la semana del 31-oct-2026). */
 export const diaSueldo = p => { const s = diaDe(p.creado || p.entregado); return s >= SUELDO_POR_SALIDA ? s : diaDe(p.entregado); };
-export const sueldoPedidos = ps => { const g = {}; ps.forEach(p => { const d = diaSueldo(p); g[d] = (g[d] || 0) + servicio(p); }); return Object.values(g).reduce((a, x) => a + sueldoDe(x), 0); };
+export const sueldoPedidos = (ps, sinDesc = () => false) => { const g = {}; ps.forEach(p => { const k = p.mensajeroId + "|" + diaSueldo(p); g[k] = (g[k] || 0) + servicio(p); }); return Object.entries(g).reduce((a, [k, x]) => { const [mid, d] = k.split("|"); return a + sueldoDe(x, sinDesc(mid, d)); }, 0); };
 export const valorAdel = c => Math.max(0, (Number(c.valor) || 0) - (Number(c.devuelto) || 0));
 export const esDeSemana = (c, sem, dias) => (c.semana ? c.semana === sem : dias.includes(diaDe(c.fecha)));
 export const normNom = x => sinTildes(x).replace(/[^a-z0-9]/g, "");
@@ -243,6 +245,7 @@ export function crearCalculos(S, { corteRemoto = 0 } = {}) {
 
   /* ---- sueldos ---- */
   const jornada = (pid, dia) => Number(S.jornadas[pid + "_" + dia]?.valor) || 0;
+  const sinDescuento = (pid, dia) => !!S.jornadas?.[idSinDesc(pid, dia)]?.sinDescuento;
   const previoId = (pid, sem) => pid + "_previo_" + sem;
   const sueldoPrevio = (pid, sem) => Number(S.jornadas[previoId(pid, sem)]?.valor) || 0;
   function sueldosDia(dia) {
@@ -252,7 +255,7 @@ export function crearCalculos(S, { corteRemoto = 0 } = {}) {
     for (const [mid, ps] of Object.entries(porM)) {
       const dom = ps.reduce((a, p) => a + servicio(p), 0);
       if (["dueno", "oficina"].includes(tipoDe(S.mensajeros[mid]))) propios += dom; // 100 % para JS
-      else { res[mid] = sueldoDe(dom); dom30 += dom * (1 - PCT_SUELDO); desc += DESC_SUELDO; nMens++; }
+      else { const sd = sinDescuento(mid, dia); res[mid] = sueldoDe(dom, sd); dom30 += dom * (1 - PCT_SUELDO); if (!sd) { desc += DESC_SUELDO; nMens++; } }
     }
     for (const m of V("mensajeros")) if (PAGO_FIJO.includes(tipoDe(m))) { const x = jornada(m.id, dia); if (x) { res[m.id] = x; fijos += x; } }
     const ganancias = V("movimientos").filter(m => m.tipo === "ganancia" && diaDe(m.fecha) === dia).reduce((a, m) => a + (Number(m.valor) || 0), 0);
@@ -325,7 +328,7 @@ export function crearCalculos(S, { corteRemoto = 0 } = {}) {
     asistentes, cajaOficina, sumaMedios,
     corteCaja, yaContado, textoContado, diaMinCaja, fechaCaja, diaAntesDelArqueo, cambiaLoContado, arqueosCaja,
     libroCaja, resumenCaja, esperadoArqueo, movsCuenta, saldoCuenta,
-    jornada, previoId, sueldoPrevio, sueldosDia, resumenSemana, sueldoPersonaSemana, pendienteAnterior, semanasAdelanto,
+    jornada, sinDescuento, previoId, sueldoPrevio, sueldosDia, resumenSemana, sueldoPersonaSemana, pendienteAnterior, semanasAdelanto,
     pendientesCierre, cuadreDia,
     ahora
   };

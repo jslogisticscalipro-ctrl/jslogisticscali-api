@@ -7,4 +7,6 @@ import { permitir, EQUIPO } from "../middleware/autorizar.js";
 const r = Router();
 r.get("/semana", permitir("admin"), validar({ query: V.semana }), C.semana);
 r.get("/mensajeros/:id", permitir(EQUIPO), validar({ params: V.paramId, query: V.semana }), C.deMensajero); // el mensajero, solo el suyo
+r.put("/sin-descuento/:personaId/:dia", permitir("admin"), validar({ params: V.paramSinDescuento }), C.sinDescuento);
+r.delete("/sin-descuento/:personaId/:dia", permitir("admin"), validar({ params: V.paramSinDescuento }), C.volverADescontar);
 export default r;

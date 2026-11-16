@@ -297,15 +297,17 @@ CREATE INDEX IF NOT EXISTS cajamovs_cat_idx     ON cajamovs (cat, fecha DESC);
 CREATE INDEX IF NOT EXISTS cajamovs_persona_idx ON cajamovs (persona_id, fecha DESC);
 
 CREATE TABLE IF NOT EXISTS jornadas (              -- días trabajados con pago fijo
-  id         TEXT PRIMARY KEY,                     -- {personaId}_{AAAA-MM-DD} o {personaId}_previo_{semana}
+  id         TEXT PRIMARY KEY,                     -- {personaId}_{AAAA-MM-DD}, {personaId}_previo_{semana} o {personaId}_sindesc_{AAAA-MM-DD}
   persona_id TEXT NOT NULL REFERENCES mensajeros(id) ON DELETE CASCADE,
   dia        DATE,
   semana     TEXT,
   valor      BIGINT NOT NULL DEFAULT 0 CHECK (valor >= 0),
   previo     BOOLEAN NOT NULL DEFAULT false,
+  sin_descuento BOOLEAN,                           -- día de un mensajero sin el descuento de $ 25.000
   nota       TEXT NOT NULL DEFAULT ''
 );
 ALTER TABLE jornadas ADD COLUMN IF NOT EXISTS nota TEXT NOT NULL DEFAULT '';
+ALTER TABLE jornadas ADD COLUMN IF NOT EXISTS sin_descuento BOOLEAN;
 CREATE INDEX IF NOT EXISTS jornadas_persona_idx ON jornadas (persona_id, dia);
 
 -- ---------- Auditoría y recuperación ----------

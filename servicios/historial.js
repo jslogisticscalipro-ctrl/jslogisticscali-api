@@ -1,7 +1,7 @@
 /* Historial de cambios: quién hizo qué y cuándo. Mismos textos que registrar()/logCambio() de la app,
    pero ahora los escribe el servidor (el celular ya no puede saltárselo ni falsearlo). */
 import { Historial, cargarEstado } from "../models/documentos.js";
-import { COL_NOM, CAMPOS, NO_LOG, ESTADOS, METODOS, MOTIVOS, CUENTAS_JS, TIPOS, MOVS, MEDIOS, CATS } from "../helpers/constantes.js";
+import { COL_NOM, CAMPOS, NO_LOG, ESTADOS, METODOS, MOTIVOS, CUENTAS_JS, TIPOS, MOVS, MEDIOS, CATS, DESC_SUELDO } from "../helpers/constantes.js";
 import { hora } from "../helpers/fechas.js";
 import { pesos } from "../helpers/texto.js";
 import { ahora } from "../helpers/reloj.js";
@@ -29,7 +29,7 @@ function resumenDoc(N, col, id, d) {
     case "recaudos": return pesos(d.valor) + " de " + nm(d.mensajeroId);
     case "liquidaciones": return nm(d.mensajeroId) + " · " + textoLiq(Number(d.debe) || 0);
     case "cajamovs": return (CATS[d.cat] || "") + " " + pesos(d.valor) + (d.personaId ? " · " + nm(d.personaId) : "") + (d.concepto ? " · " + d.concepto : "");
-    case "jornadas": return nm(d.personaId) + " · " + d.dia + " · " + pesos(d.valor);
+    case "jornadas": return d.sinDescuento ? nm(d.personaId) + " · " + d.dia + " · sin descuento de " + pesos(DESC_SUELDO) : nm(d.personaId) + " · " + d.dia + " · " + pesos(d.valor);
     case "vinculos": return nm(d.mensajeroId);
     default: return id;
   }

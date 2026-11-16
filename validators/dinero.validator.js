@@ -90,6 +90,8 @@ export const movCuenta = z.object({ tipo: z.string().max(10), valor, medio: z.st
 
 export const jornada = z.looseObject({ personaId: id, dia, valor: valor.optional(), previo: z.boolean().optional(), nota: texto(200).optional() });
 export const semana = z.object({ semana: dia.optional() });
+/** El día se revisa en el servicio para dar el mismo mensaje que la app. */
+export const paramSinDescuento = z.object({ personaId: id, dia: z.string().trim().max(20) });
 export const diaQuery = z.object({ dia: dia.optional() });
 export const cuadre = z.object({ dia: dia.optional(), clienteId: id.optional() });
 

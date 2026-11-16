@@ -1,11 +1,12 @@
 /* Sueldos: planilla de la semana, "Mi sueldo" del mensajero, días de pago fijo y sueldo anterior al empalme. */
 import { Mensajeros, Jornadas } from "../models/documentos.js";
-import { PAGO_FIJO, TIPOS } from "../helpers/constantes.js";
+import { PAGO_FIJO, TIPOS, DESC_SUELDO } from "../helpers/constantes.js";
 import { hoy, semanaDe, esDia } from "../helpers/fechas.js";
 import { datosInvalidos, noEncontrado, permisoNegado } from "./errores.js";
 import { enTransaccion, guardar, borrar } from "./transaccion.js";
 import { calculosDe, exigirAdmin, esMio, numero } from "./contexto.js";
-import { cerrado, servicio, diaSueldo, tipoDe, valorAdel } from "../helpers/calculos.js";
+import { cerrado, servicio, diaSueldo, tipoDe, valorAdel, ganaPorcentaje, idSinDesc } from "../helpers/calculos.js";
+import { pesos } from "../helpers/texto.js";
 
 const COLS = ["pedidos", "mensajeros", "jornadas", "cajamovs", "movimientos"];
 const persona = m => ({ id: m.id, nombre: m.nombre, tipo: tipoDe(m), tipoNombre: TIPOS[tipoDe(m)], tarifa: Number(m.tarifa) || 0 });
@@ -23,7 +24,7 @@ export async function semana(ctx, sem) {
   const tot = R.filas.reduce((a, f) => ({ total: a.total + f.total, adel: a.adel + f.adel, pagado: a.pagado + f.pagado, neto: a.neto + f.neto }), { total: 0, adel: 0, pagado: 0, neto: 0 });
   return {
     semana: R.sem, dias: R.dias, totales: tot,
-    filas: R.filas.map(f => ({ ...f, m: undefined, persona: persona(f.m), jornadas: R.dias.map(d => calc.jornada(f.m.id, d)), adelantos: f.adelantos.map(c => ({ ...c, pendiente: valorAdel(c) })) })),
+    filas: R.filas.map(f => ({ ...f, m: undefined, persona: persona(f.m), jornadas: R.dias.map(d => calc.jornada(f.m.id, d)), sinDescuento: R.dias.map(d => calc.sinDescuento(f.m.id, d)), adelantos: f.adelantos.map(c => ({ ...c, pendiente: valorAdel(c) })) })),
     calculoDueno: R.porDia.map((x, i) => ({ dia: R.dias[i], dom30: x.dom30, propios: x.propios, ganancias: x.ganancias, desc: x.desc, nMens: x.nMens, fijos: x.fijos, sueldo: x.javier })),
     semanasAdelanto: calc.semanasAdelanto()
   };
@@ -40,7 +41,7 @@ export async function sueldoDe(ctx, mid, sem) {
   const ent = Object.values(calc.S.pedidos).filter(p => cerrado(p) && p.mensajeroId === mid);
   return {
     persona: persona(m), ...R,
-    porDia: R.dias.map((d, i) => { const ps = ent.filter(p => diaSueldo(p) === d); return { dia: d, entregas: ps.length, domicilios: ps.reduce((x, p) => x + servicio(p), 0), sueldo: R.vals[i] }; }),
+    porDia: R.dias.map((d, i) => { const ps = ent.filter(p => diaSueldo(p) === d); return { dia: d, entregas: ps.length, domicilios: ps.reduce((x, p) => x + servicio(p), 0), sueldo: R.vals[i], sinDescuento: calc.sinDescuento(mid, d) }; }),
     anteriores: calc.pendienteAnterior(mid, R.sem).map(r => ({ semana: r.sem, neto: r.neto }))
   };
 }
@@ -64,6 +65,29 @@ export async function quitarDia(ctx, personaId, dia) {
   exigirAdmin(ctx.actor);
   return enTransaccion(ctx, async t => {
     const d = await borrar(t, "jornadas", personaId + "_" + dia);
+    return { quitado: !!d };
+  });
+}
+/** Un día sin el descuento de $ 25.000 para un mensajero: ese día gana el 70 % completo y esos $ 25.000 no suman
+    al sueldo del dueño. No mueve plata de la caja, así que no se bloquea por arqueos ni por el corte de caja. */
+export async function sinDescuentoDia(ctx, personaId, dia) {
+  exigirAdmin(ctx.actor);
+  if (!esDia(dia)) throw datosInvalidos("El día no es válido.");
+  if (dia > hoy()) throw datosInvalidos("No se puede marcar un día que no ha llegado.");
+  return enTransaccion(ctx, async t => {
+    const m = await Mensajeros.obtener(t.c, personaId);
+    if (!m) throw noEncontrado("Esa persona no está en Personal.");
+    if (!ganaPorcentaje(m)) throw datosInvalidos("Solo a los mensajeros se les descuentan los " + pesos(DESC_SUELDO) + ".");
+    const id = idSinDesc(personaId, dia), ya = await Jornadas.obtener(t.c, id);
+    if (ya) return ya;
+    return guardar(t, "jornadas", { id, personaId, dia, valor: 0, sinDescuento: true, nota: "Sin descuento de " + pesos(DESC_SUELDO) });
+  });
+}
+/** Quita la marca: ese día vuelve a descontarse. Sirve para cualquier fecha. */
+export async function volverADescontar(ctx, personaId, dia) {
+  exigirAdmin(ctx.actor);
+  return enTransaccion(ctx, async t => {
+    const d = await borrar(t, "jornadas", idSinDesc(personaId, dia));
     return { quitado: !!d };
   });
 }

@@ -11,7 +11,8 @@ import * as CajaPatinador from "../models/cajaPatinador.model.js";
 import { totales, ganaPorcentaje, sueldoPedidos, tipoDe } from "../helpers/calculos.js";
 
 // movimientos: los pagos de clientes que recibió el mensajero en la calle suman a lo que debe.
-const COLS_PERIODO = ["pedidos", "recaudos", "cajamovs", "liquidaciones", "mensajeros", "movimientos"];
+// "jornadas": el sueldo del período usa los días sin el descuento de $ 25.000.
+const COLS_PERIODO = ["pedidos", "recaudos", "cajamovs", "liquidaciones", "mensajeros", "movimientos", "jornadas"];
 
 /** GET /liquidaciones/pagina: cierres recientes filtrados, de a 9 en escritorio y 5 en celular. */
 export async function paginaLiquidaciones(ctx, { pagina, porPagina, dia, estado = "todos", buscar = "" } = {}) {
@@ -46,7 +47,7 @@ function vistaPeriodo(calc, mid) {
     entregas: pm.ps, recaudos: pm.recs, bases: pm.bases,
     efectivo: pm.efectivo, base: pm.base, gastos: pm.gastos, recibido: pm.recibido, cobros: pm.cobros, cobrosCli: pm.cobrosCli, debe: pm.debe,
     totales: t, enRuta, sinValorServicio: pm.ps.filter(p => !Number(p.valorServicio)).length,
-    sueldo: ganaPorcentaje(m) ? sueldoPedidos(pm.ps) : null
+    sueldo: ganaPorcentaje(m) ? sueldoPedidos(pm.ps, calc.sinDescuento) : null
   };
 }
 
@@ -155,7 +156,7 @@ export async function liquidar(ctx, { mensajeroId: mid, entregaFinal, medio = "e
     const m = await Mensajeros.obtener(t.c, mid, { bloquear: true }); // una liquidación a la vez por mensajero
     if (!m) throw noEncontrado("Esa persona no está en Personal.");
     const calc = await calculosDe(t.c, COLS_SUELDO);
-    const pm = calc.periodoMensajero(mid), tt = totales(pm.ps), sueldo = ganaPorcentaje(m) ? sueldoPedidos(pm.ps) : 0;
+    const pm = calc.periodoMensajero(mid), tt = totales(pm.ps), sueldo = ganaPorcentaje(m) ? sueldoPedidos(pm.ps, calc.sinDescuento) : 0;
     const enRuta = Object.values(calc.S.pedidos).filter(p => p.estado === "pendiente" && p.mensajeroId === mid).length;
     const semanas = calc.semanasAdelanto().map(([w]) => w), sem = semana || semanas[0];
     if (pasarAdelanto && !semanas.includes(sem)) throw datosInvalidos("El adelanto solo se puede cargar a la semana actual o a la anterior.");

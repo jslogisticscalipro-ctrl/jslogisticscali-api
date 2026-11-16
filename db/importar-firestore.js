@@ -373,10 +373,10 @@ export async function importar({ carpeta, simular = false, conFotos = true, reem
       const previo = !!d.previo;
       const dia = !previo && /^\d{4}-\d{2}-\d{2}$/.test(d.dia) ? d.dia : null;
       if (!previo && !dia) { inf.omitir("jornadas", "día inválido", id); continue; }
-      filasJ.push([id, d.personaId, dia, previo ? texto(d.dia || d.semana) : null, Math.max(0, pesos(d.valor)), previo, texto(d.nota)]);
+      filasJ.push([id, d.personaId, dia, previo ? texto(d.dia || d.semana) : null, Math.max(0, pesos(d.valor)), previo, d.sinDescuento === true ? true : null, texto(d.nota)]);
       inf.ok("jornadas");
     }
-    await upsert(q, "jornadas", ["id", "persona_id", "dia", "semana", "valor", "previo", "nota"], filasJ);
+    await upsert(q, "jornadas", ["id", "persona_id", "dia", "semana", "valor", "previo", "sin_descuento", "nota"], filasJ);
     listo("jornadas", filasJ.length);
 
     // Historial: en Firestore era un documento por día y persona con las entradas adentro. Se recarga completo.

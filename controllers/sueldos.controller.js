@@ -9,6 +9,10 @@ import { responder } from "./accion.js";
 export const semana = responder((ctx, req) => S.semana(ctx, req.valido.query.semana));
 export const deMensajero = responder((ctx, req) => S.sueldoDe(ctx, req.valido.params.id, req.valido.query.semana));
 
+/** Un día sin el descuento de $ 25.000 para un mensajero, y quitar esa marca. */
+export const sinDescuento = responder((ctx, req) => S.sinDescuentoDia(ctx, req.valido.params.personaId, req.valido.params.dia), { clave: "jornada" });
+export const volverADescontar = responder((ctx, req) => S.volverADescontar(ctx, req.valido.params.personaId, req.valido.params.dia));
+
 export const listarJornadas = responder(ctx => leerDe(ctx, "jornadas"), { clave: "jornadas" });
 /** Crea o cambia el pago de un día, o el sueldo previo de una semana (previo: true). El id lo arma el servidor. */
 export const ponerJornada = responder((ctx, req) => {

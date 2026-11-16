@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import vm from "node:vm";
 import { generarDatos } from "./generador.js";
-import { crearCalculos, resultadoArqueo, netoArqueo } from "../helpers/calculos.js";
+import { crearCalculos, resultadoArqueo, netoArqueo, sueldoPedidos, diaSueldo } from "../helpers/calculos.js";
+import { DESC_SUELDO } from "../helpers/constantes.js";
 import { diasSemana, moverDia, hoy, semanaDe, moverSemana } from "../helpers/fechas.js";
 
 const RUTA_APP = new URL("../../app/js/app.js", import.meta.url);
@@ -28,11 +29,16 @@ function cargarAppOriginal() {
   return ctx;
 }
 
+const esSinDesc = k => k.includes("_sindesc_");
+function sinJornadasSinDesc(S) { for (const k of Object.keys(S.jornadas)) if (esSinDesc(k)) delete S.jornadas[k]; return S; }
+
 const r = x => JSON.parse(JSON.stringify(x, (k, v) => (typeof v === "number" ? Math.round(v * 100) / 100 : v)));
 
 test("los cálculos del servidor dan exactamente lo mismo que app/js/app.js", { skip: !existsSync(RUTA_APP) && "no se encontró app/js/app.js" }, () => {
   for (const semilla of [7, 21, 1234]) {
-    const datos = generarDatos(semilla);
+    // El app/js/app.js de este repositorio todavía no tiene "un día sin el descuento de $ 25.000": a los dos lados se les
+    // quitan esas jornadas y se comparan; el efecto de la excepción se compara aparte, en la prueba de abajo.
+    const datos = sinJornadasSinDesc(generarDatos(semilla));
     const ctx = cargarAppOriginal();
     ctx.__datos = JSON.stringify(datos);
     vm.runInContext(`{ const d = JSON.parse(__datos); for (const k of Object.keys(S)) { S[k] = {}; Object.assign(S[k], d[k] || {}); } }`, ctx);
@@ -64,6 +70,7 @@ test("los cálculos del servidor dan exactamente lo mismo que app/js/app.js", { 
       parecidos: [`parecidos("Tienda Luna","3110000000").map(d=>[d.c.id,d.igual])`, srv.parecidos("Tienda Luna", "3110000000").map(d => [d.c.id, d.igual])],
       pendientesCierre: [`(x=>({mens:x.mens.map(y=>[y.m.id,y.debe]),ofis:x.ofis.map(y=>[y.u.uid,y.s]),sinRem:x.sinRem.length,sinServ:x.sinServ.length,enRuta:x.enRuta.length,arqueoHoy:x.arqueoHoy}))(pendientesCierre())`,
         (x => ({ mens: x.mens.map(y => [y.m.id, y.debe]), ofis: x.ofis.map(y => [y.u.uid, y.s]), sinRem: x.sinRem.length, sinServ: x.sinServ.length, enRuta: x.enRuta.length, arqueoHoy: x.arqueoHoy }))(srv.pendientesCierre())],
+      sueldoPeriodo: [`Object.keys(S.mensajeros).map(m=>sueldoPedidos(periodoMensajero(m).ps))`, mids.map(m => sueldoPedidos(srv.periodoMensajero(m).ps, srv.sinDescuento))],
       saldoCuenta: [`["cu1","cu2","cu3"].map(saldoCuenta)`, ["cu1", "cu2", "cu3"].map(srv.saldoCuenta)],
       yaContado: [`[Date.now(), Date.now()-3*864e5, Date.now()-20*864e5].map(yaContado)`, [Date.now(), Date.now() - 3 * 864e5, Date.now() - 20 * 864e5].map(srv.yaContado)],
       semanasAdelanto: [`semanasAdelanto().map(x=>x[0])`, srv.semanasAdelanto().map(x => x[0])],
@@ -77,3 +84,41 @@ test("los cálculos del servidor dan exactamente lo mismo que app/js/app.js", { 
   }
 });
 
+
+/* Un día sin el descuento de $ 25.000 (app.js de referencia: commit 3c89cb6 del repositorio de la app). Como el app/js/app.js
+   de aquí no lo trae, se compara el servidor con las jornadas "sindesc" contra la app sin ellas: la única diferencia debe
+   ser que, cada día marcado en que el mensajero tuvo entregas, él gana $ 25.000 más y el dueño $ 25.000 menos. */
+test("un día sin descuento: el mensajero gana el 70 % completo y el dueño deja de sumar esos $ 25.000", { skip: !existsSync(RUTA_APP) && "no se encontró app/js/app.js" }, () => {
+  let marcadosConEntregas = 0, marcadosSinEntregas = 0, conPeriodo = 0;
+  for (const semilla of [7, 21, 1234]) {
+    const datos = generarDatos(semilla);
+    const marcas = Object.values(datos.jornadas).filter(j => esSinDesc(j.id));
+    assert.ok(marcas.length >= 4, "el generador debe traer jornadas sin descuento");
+    const ctx = cargarAppOriginal();
+    ctx.__datos = JSON.stringify(sinJornadasSinDesc(JSON.parse(JSON.stringify(datos))));
+    vm.runInContext(`{ const d = JSON.parse(__datos); for (const k of Object.keys(S)) { S[k] = {}; Object.assign(S[k], d[k] || {}); } }`, ctx);
+    const app = code => r(vm.runInContext(code, ctx));
+    const srv = crearCalculos(JSON.parse(JSON.stringify(datos)), { corteRemoto: 0 });
+    const dueno = Object.values(datos.mensajeros).find(m => m.tipo === "dueno").id;
+    for (const j of marcas) assert.equal(srv.sinDescuento(j.personaId, j.dia), true);
+
+    for (const dia of new Set(marcas.map(j => j.dia))) {
+      const a = app(`sueldosDia(${JSON.stringify(dia)})`), s = r(srv.sueldosDia(dia));
+      const conEntregas = marcas.filter(j => j.dia === dia && a.res[j.personaId] !== undefined);
+      marcadosConEntregas += conEntregas.length; marcadosSinEntregas += marcas.filter(j => j.dia === dia).length - conEntregas.length;
+      const n = conEntregas.length, res = { ...a.res };
+      for (const j of conEntregas) res[j.personaId] += DESC_SUELDO;
+      if (n) res[dueno] -= n * DESC_SUELDO;
+      // Un día marcado sin entregas no cambia nada.
+      assert.deepEqual(s, { ...a, res, desc: a.desc - n * DESC_SUELDO, nMens: a.nMens - n, javier: a.javier - n * DESC_SUELDO }, `sueldosDia ${dia} (semilla ${semilla})`);
+    }
+    // Sueldo del período de cada mensajero: $ 25.000 más por cada día marcado del período en que tuvo entregas.
+    const mids = Object.keys(datos.mensajeros);
+    const appSueldo = app(`Object.keys(S.mensajeros).map(m=>sueldoPedidos(periodoMensajero(m).ps))`);
+    const srvSueldo = mids.map(m => sueldoPedidos(srv.periodoMensajero(m).ps, srv.sinDescuento));
+    const extra = mids.map(m => { const ds = new Set(srv.periodoMensajero(m).ps.map(diaSueldo)); return marcas.filter(j => j.personaId === m && ds.has(j.dia)).length * DESC_SUELDO; });
+    assert.deepEqual(r(srvSueldo), appSueldo.map((x, i) => x + extra[i]), `sueldo del período (semilla ${semilla})`);
+    conPeriodo += extra.filter(Boolean).length;
+  }
+  assert.ok(marcadosConEntregas > 0 && marcadosSinEntregas > 0 && conPeriodo > 0);
+});
