@@ -16,7 +16,8 @@ export function lecturasDe(a) {
   const mid = a.mensajeroId, L = { vinculos: { uid: a.uid } };
   if (a.esAsistente) {
     Object.assign(L, { pedidos: null, clientes: null, mensajeros: null, movimientos: null, cuentas: null, recaudos: null, liquidaciones: null });
-    L.cajamovs = [{ cat: "interna" }, { cat: "base" }, { personaUid: a.uid }];
+    // "gasto": los gastos salen de la Base de JS y el asistente la ve igual que administración.
+    L.cajamovs = [{ cat: "interna" }, { cat: "gasto" }, { cat: "base" }, { personaUid: a.uid }];
   } else if (mid) Object.assign(L, { pedidos: { mensajeroId: mid }, mensajeros: { id: mid }, movimientos: { mensajeroId: mid } }); // movimientos: los pagos que él recibió (Mi caja)
   if (mid) {
     L.jornadas = { personaId: mid };

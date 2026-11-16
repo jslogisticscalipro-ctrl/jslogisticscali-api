@@ -240,7 +240,10 @@ export function crearCalculos(S, { corteRemoto = 0 } = {}) {
   }
 
   /* ---- cuentas internas ---- */
-  const movsCuenta = id => V("cajamovs").filter(c => c.cat === "interna" && c.cuentaId === id).sort((a, b) => b.fecha - a.fecha);
+  const cuentaBase = () => V("cuentas").sort((a, b) => String(a.id).localeCompare(String(b.id))).find(c => c.tipo === "base");
+  // Los gastos de Caja salen de la base de JS: guardan cuentaId y cuentan como salida de esa cuenta (sin dejar de ser gasto)
+  const deCuenta = c => c.cat === "interna" || (c.cat === "gasto" && !!c.cuentaId);
+  const movsCuenta = id => V("cajamovs").filter(c => deCuenta(c) && c.cuentaId === id).sort((a, b) => b.fecha - a.fecha);
   const saldoCuenta = id => movsCuenta(id).reduce((a, c) => a + (c.tipo === "sale" ? 1 : -1) * (Number(c.valor) || 0), 0); // + = te debe
 
   /* ---- sueldos ---- */
@@ -327,7 +330,7 @@ export function crearCalculos(S, { corteRemoto = 0 } = {}) {
     liquidacionesDe, yaLiquidado, guiasLiquidadas, pedidoLiquidado, periodoMensajero, recibidoDia,
     asistentes, cajaOficina, sumaMedios,
     corteCaja, yaContado, textoContado, diaMinCaja, fechaCaja, diaAntesDelArqueo, cambiaLoContado, arqueosCaja,
-    libroCaja, resumenCaja, esperadoArqueo, movsCuenta, saldoCuenta,
+    libroCaja, resumenCaja, esperadoArqueo, cuentaBase, deCuenta, movsCuenta, saldoCuenta,
     jornada, sinDescuento, previoId, sueldoPrevio, sueldosDia, resumenSemana, sueldoPersonaSemana, pendienteAnterior, semanasAdelanto,
     pendientesCierre, cuadreDia,
     ahora

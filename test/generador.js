@@ -101,5 +101,12 @@ export function generarDatos(semilla = 7, ahora = Date.now()) {
   const sinDesc = (pid, dia) => { const k = idSinDesc(pid, dia); S.jornadas[k] = { id: k, personaId: pid, dia, valor: 0, sinDescuento: true, nota: "Sin descuento de $ 25.000" }; };
   for (const [mid, i] of [["m1", 0], ["m1", 2], ["m2", 1], ["m3", 0]]) { const d = diasCon(mid)[i]; if (d) sinDesc(mid, d); }
   sinDesc("m2", new Date(desde - 5 * DIA).toLocaleDateString("en-CA", { timeZone: "America/Bogota" }));
+  // Gastos que salen de la Base de JS (cu3): guardan cuentaId. gb4 es un gasto viejo, sin cuentaId: no toca la base.
+  Object.assign(S.cajamovs, {
+    gb1: { id: "gb1", cat: "gasto", tipo: "sale", valor: 80000, medio: "efectivo", concepto: "LUZ", cuentaId: "cu3", fecha: ahora - 3 * DIA - 3600000 },
+    gb2: { id: "gb2", cat: "gasto", tipo: "sale", valor: 15000, medio: "nequi", concepto: "Papelería", cuentaId: "cu3", fecha: ahora - 6 * DIA - 7200000 },
+    gb3: { id: "gb3", cat: "gasto", tipo: "sale", valor: 42000, medio: "bancolombia", concepto: "Internet", cuentaId: "cu3", fecha: ahora - DIA - 600000 },
+    gb4: { id: "gb4", cat: "gasto", tipo: "sale", valor: 9000, medio: "efectivo", concepto: "Gasto viejo", fecha: ahora - 12 * DIA }
+  });
   return S;
 }

@@ -320,3 +320,23 @@ test("un día sin el descuento de $ 25.000 de la app vieja llega con sin_descuen
   // Esta exportación trae datos sucios a propósito; aquí solo importa que las jornadas lleguen todas.
   assert.deepEqual((await verificar({ carpeta })).diferencias.filter(d => /jornada/i.test(d.dato)), []);
 });
+
+test("un gasto de la app vieja cargado a la Base de JS llega con cuenta_id y cuenta en la base", async () => {
+  const { cargarEstado } = await import("../models/documentos.js");
+  const { crearCalculos } = await import("../helpers/calculos.js");
+  await reiniciarBase();
+  const datos = exportacion();
+  datos.cuentas.push({ id: "kb", datos: { nombre: "Base de JS", tipo: "base", creado: T } });
+  const gasto = { tipo: "sale", cat: "gasto", valor: 80000, medio: "efectivo", concepto: "LUZ", cuentaId: "kb", fecha: T + H };
+  datos.cajamovs.push({ id: "g1", datos: gasto }, { id: "g0", datos: { tipo: "sale", cat: "gasto", valor: 3000, medio: "efectivo", concepto: "viejo", fecha: T } });
+  await escribir(datos);
+  await importar({ carpeta, conFotos: false, log: silencio });
+  assert.deepEqual(await uno(`SELECT cat, valor, cuenta_id FROM cajamovs WHERE id = 'g1'`), { cat: "gasto", valor: 80000, cuenta_id: "kb" });
+  assert.equal((await uno(`SELECT cuenta_id FROM cajamovs WHERE id = 'g0'`)).cuenta_id, null); // el gasto viejo queda como está
+  const calc = crearCalculos(await cargarEstado(pool, ["cajamovs", "cuentas"]));
+  assert.equal(calc.cuentaBase().id, "kb");
+  assert.deepEqual(calc.movsCuenta("kb").map(c => c.id), ["g1"]);
+  assert.equal(calc.saldoCuenta("kb"), 80000); // Base actual = −80.000
+  // El conteo de cajamovs difiere por el movimiento "raro" que la exportación de ejemplo trae a propósito.
+  assert.deepEqual((await verificar({ carpeta })).diferencias.filter(d => /cuenta/i.test(d.dato)), []);
+});

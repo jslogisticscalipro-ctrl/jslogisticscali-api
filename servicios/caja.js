@@ -72,9 +72,11 @@ export async function registrarMovimiento(ctx, datos) {
     if (CATS_PERSONA.includes(cat) && !(per && (await Mensajeros.existe(t.c, per)))) throw datosInvalidos("Elige la persona");
     const semana = CATS_SEMANA.includes(cat) ? datos.semana || "" : "";
     if (CATS_SEMANA.includes(cat) && !esDia(semana)) throw datosInvalidos("Elige la semana del sueldo");
-    const calc = await calculosDe(t.c, ["cajamovs"]);
+    const calc = await calculosDe(t.c, ["cajamovs", "cuentas"]);
     exigirDiaAbierto(calc, dia);
-    return guardar(t, "cajamovs", { id: nuevoId(), tipo, cat, personaId: per, valor, medio: datos.medio, concepto: texto(datos.concepto, 300), fecha: calc.fechaCaja(dia), semana });
+    // Los gastos salen de la Base de JS: quedan cargados a la cuenta de tipo "base" (si no hay, se guardan como antes).
+    const base = cat === "gasto" ? calc.cuentaBase() : null;
+    return guardar(t, "cajamovs", { id: nuevoId(), tipo, cat, personaId: per, valor, medio: datos.medio, concepto: texto(datos.concepto, 300), fecha: calc.fechaCaja(dia), semana, ...(base ? { cuentaId: base.id } : {}) });
   });
 }
 /** Quitar un movimiento de caja (también de cuentas internas o de una caja de oficina). Lo ya contado no se quita. */

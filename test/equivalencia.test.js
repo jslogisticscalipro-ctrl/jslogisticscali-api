@@ -31,14 +31,18 @@ function cargarAppOriginal() {
 
 const esSinDesc = k => k.includes("_sindesc_");
 function sinJornadasSinDesc(S) { for (const k of Object.keys(S.jornadas)) if (esSinDesc(k)) delete S.jornadas[k]; return S; }
+// Gastos cargados a la Base de JS (commit ff1bc5e de la app de referencia): el app/js/app.js de aquí no los conoce.
+const esGastoDeCuenta = c => c.cat === "gasto" && !!c.cuentaId;
+function sinGastosDeCuenta(S) { for (const c of Object.values(S.cajamovs)) if (esGastoDeCuenta(c)) delete c.cuentaId; return S; }
 
 const r = x => JSON.parse(JSON.stringify(x, (k, v) => (typeof v === "number" ? Math.round(v * 100) / 100 : v)));
 
 test("los cálculos del servidor dan exactamente lo mismo que app/js/app.js", { skip: !existsSync(RUTA_APP) && "no se encontró app/js/app.js" }, () => {
   for (const semilla of [7, 21, 1234]) {
-    // El app/js/app.js de este repositorio todavía no tiene "un día sin el descuento de $ 25.000": a los dos lados se les
-    // quitan esas jornadas y se comparan; el efecto de la excepción se compara aparte, en la prueba de abajo.
-    const datos = sinJornadasSinDesc(generarDatos(semilla));
+    // El app/js/app.js de este repositorio todavía no tiene "un día sin el descuento de $ 25.000" ni los gastos cargados a la
+    // Base de JS: a los dos lados se les quitan las jornadas "sindesc" y el cuentaId de esos gastos, y el efecto de cada regla
+    // se compara aparte, en las pruebas de abajo.
+    const datos = sinGastosDeCuenta(sinJornadasSinDesc(generarDatos(semilla)));
     const ctx = cargarAppOriginal();
     ctx.__datos = JSON.stringify(datos);
     vm.runInContext(`{ const d = JSON.parse(__datos); for (const k of Object.keys(S)) { S[k] = {}; Object.assign(S[k], d[k] || {}); } }`, ctx);
@@ -72,6 +76,7 @@ test("los cálculos del servidor dan exactamente lo mismo que app/js/app.js", { 
         (x => ({ mens: x.mens.map(y => [y.m.id, y.debe]), ofis: x.ofis.map(y => [y.u.uid, y.s]), sinRem: x.sinRem.length, sinServ: x.sinServ.length, enRuta: x.enRuta.length, arqueoHoy: x.arqueoHoy }))(srv.pendientesCierre())],
       sueldoPeriodo: [`Object.keys(S.mensajeros).map(m=>sueldoPedidos(periodoMensajero(m).ps))`, mids.map(m => sueldoPedidos(srv.periodoMensajero(m).ps, srv.sinDescuento))],
       saldoCuenta: [`["cu1","cu2","cu3"].map(saldoCuenta)`, ["cu1", "cu2", "cu3"].map(srv.saldoCuenta)],
+      movsCuenta: [`["cu1","cu2","cu3"].map(k=>movsCuenta(k).map(c=>c.id))`, ["cu1", "cu2", "cu3"].map(k => srv.movsCuenta(k).map(c => c.id))],
       yaContado: [`[Date.now(), Date.now()-3*864e5, Date.now()-20*864e5].map(yaContado)`, [Date.now(), Date.now() - 3 * 864e5, Date.now() - 20 * 864e5].map(srv.yaContado)],
       semanasAdelanto: [`semanasAdelanto().map(x=>x[0])`, srv.semanasAdelanto().map(x => x[0])],
       diasSemana: [`diasSemana(semanaDe(hoy()))`, diasSemana(semanaDe(h))]
@@ -121,4 +126,33 @@ test("un día sin descuento: el mensajero gana el 70 % completo y el dueño deja
     conPeriodo += extra.filter(Boolean).length;
   }
   assert.ok(marcadosConEntregas > 0 && marcadosSinEntregas > 0 && conPeriodo > 0);
+});
+
+/* Los gastos de caja salen de la Base de JS (app.js de referencia: commit ff1bc5e). Con el app/js/app.js de aquí se compara
+   así: la caja (libro, resumen, cajas de oficina, arqueos) da igual que si el gasto no tuviera cuentaId, y la Base de JS
+   suma cada gasto con cuentaId como una salida más (baja su "Base actual") y lo lista entre sus movimientos. */
+test("los gastos con cuentaId salen de la Base de JS sin cambiar la caja", { skip: !existsSync(RUTA_APP) && "no se encontró app/js/app.js" }, () => {
+  for (const semilla of [7, 21, 1234]) {
+    const datos = sinJornadasSinDesc(generarDatos(semilla));
+    const gastos = Object.values(datos.cajamovs).filter(esGastoDeCuenta);
+    assert.ok(gastos.length >= 3 && gastos.every(c => c.cuentaId === "cu3"), "el generador debe traer gastos de la Base de JS");
+    const ctx = cargarAppOriginal();
+    ctx.__datos = JSON.stringify(sinGastosDeCuenta(JSON.parse(JSON.stringify(datos))));
+    vm.runInContext(`{ const d = JSON.parse(__datos); for (const k of Object.keys(S)) { S[k] = {}; Object.assign(S[k], d[k] || {}); } }`, ctx);
+    const app = code => r(vm.runInContext(code, ctx));
+    const srv = crearCalculos(JSON.parse(JSON.stringify(datos)), { corteRemoto: 0 });
+
+    assert.equal(srv.cuentaBase().id, "cu3");
+    assert.deepEqual(r(srv.libroCaja()), app(`libroCaja()`), `libroCaja (semilla ${semilla})`);
+    assert.deepEqual(r((({ L, ...x }) => x)(srv.resumenCaja())), app(`(({L,...x})=>x)(resumenCaja())`), `resumenCaja (semilla ${semilla})`);
+    assert.deepEqual(r(["a1", "a2", "ad"].map(srv.cajaOficina)), app(`["a1","a2","ad"].map(cajaOficina)`), `cajaOficina (semilla ${semilla})`);
+    assert.deepEqual(r(srv.esperadoArqueo()), app(`esperadoArqueo()`), `esperadoArqueo (semilla ${semilla})`);
+
+    const suma = gastos.reduce((a, c) => a + c.valor, 0);
+    assert.deepEqual(r(["cu1", "cu2", "cu3"].map(srv.saldoCuenta)), app(`["cu1","cu2","cu3"].map(saldoCuenta)`).map((x, i) => (i === 2 ? x + suma : x)), `saldoCuenta (semilla ${semilla})`);
+    const appIds = app(`["cu1","cu2","cu3"].map(k=>movsCuenta(k).map(c=>c.id))`), fecha = id => datos.cajamovs[id].fecha;
+    appIds[2] = [...appIds[2], ...gastos.map(c => c.id)].sort((a, b) => fecha(b) - fecha(a));
+    assert.deepEqual(["cu1", "cu2", "cu3"].map(k => srv.movsCuenta(k).map(c => c.id)), appIds, `movsCuenta (semilla ${semilla})`);
+    assert.ok(!srv.movsCuenta("cu3").some(c => c.id === "gb4"), "un gasto viejo sin cuentaId no entra a la base");
+  }
 });
