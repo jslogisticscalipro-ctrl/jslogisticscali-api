@@ -7,6 +7,8 @@ process.env.JWT_SECRET = "secreto-de-pruebas-que-no-sirve-en-produccion-123";
 process.env.CORS_ORIGENES = "http://localhost:5173";
 // Límite por IP del formulario público: más alto que en producción para que las pruebas quepan (test/solicitudes.test.js).
 process.env.SOLICITUDES_POR_HORA = "12";
+// Límite del QR de traspaso: más alto que en producción para que las pruebas de un mismo mensajero quepan.
+process.env.TRASPASO_INTENTOS_MINUTO = "200";
 
 const { pool } = await import("../config/db.js");
 const { crearApp } = await import("../app.js");

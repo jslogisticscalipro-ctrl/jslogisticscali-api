@@ -67,6 +67,10 @@ const esquema = z.object({
   CHATBOT_BORRADORES_HORA: z.coerce.number().int().min(1).default(6),
   CHATBOT_SOLICITUDES_DIA: z.coerce.number().int().min(1).default(10),
   CHATBOT_FOTOS_SEGUNDOS: z.coerce.number().int().min(60).max(3600).default(900),
+  // QR de traspaso (patinador → mensajero): cuánto dura el código, cuánto puede deshacer el patinador una recogida y cuántos intentos por minuto.
+  TRASPASO_QR_MINUTOS: z.coerce.number().int().min(5).max(1440).default(360),
+  TRASPASO_DESHACER_MINUTOS: z.coerce.number().int().min(0).max(120).default(10),
+  TRASPASO_INTENTOS_MINUTO: z.coerce.number().int().min(1).default(10),
   // Chat público (visitantes sin sesión): solo info general y estado de un envío, sin nombres ni dinero.
   // Los límites van por IP y hay un tope global por día, porque cualquiera en internet puede llamarlo.
   CHATBOT_PUBLICO_ACTIVO: z.enum(["true", "false"]).default("true").transform(v => v === "true"),

@@ -184,3 +184,13 @@ export const limiteRastreoGlobal = rateLimit({
   legacyHeaders: false,
   handler: respuestaRastreo429("El rastreo tiene mucha demanda hoy. Escríbenos por WhatsApp y te ayudamos.")
 });
+
+/** Vista previa y canje del QR de traspaso: por cuenta, porque el código es corto y no se debe poder adivinar. */
+export const limiteTraspaso = rateLimit({
+  windowMs: 60_000,
+  limit: env.TRASPASO_INTENTOS_MINUTO,
+  keyGenerator: porCuenta,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  handler: respuestaChat429("TRASPASO_DEMASIADO_RAPIDO", "Muchos intentos seguidos. Espera un minuto y vuelve a escanear.")
+});

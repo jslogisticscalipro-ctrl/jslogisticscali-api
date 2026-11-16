@@ -21,6 +21,7 @@ import rastreo from "./rastreo.routes.js";
 import solicitudesPublico from "./solicitudes-publico.routes.js";
 import solicitudes from "./solicitudes.routes.js";
 import patinador from "./patinador.routes.js";
+import traspasos from "./traspasos.routes.js";
 
 const r = Router();
 
@@ -50,6 +51,7 @@ r.use("/sueldos", sueldos);
 r.use("/chatbot", chatbot);
 r.use("/solicitudes", solicitudes);
 r.use("/patinador", patinador);
+r.use("/traspasos", traspasos);
 r.use(datos); // historial, papelera, respaldo, sincronizar y eventos
 
 export default r;

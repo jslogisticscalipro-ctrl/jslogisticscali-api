@@ -6,6 +6,8 @@ import { ctxDe } from "./accion.js";
 import { nuevoId } from "../helpers/ids.js";
 import { ahora } from "../helpers/reloj.js";
 import * as Caja from "../models/cajaPatinador.model.js";
+import * as Recogida from "../models/recogidaPatinador.model.js";
+import * as Traspasos from "../servicios/traspasos.js";
 import * as Cliente from "../models/cliente.model.js";
 import * as Mensajero from "../models/mensajero.model.js";
 import * as Auditoria from "../models/auditoria.model.js";
@@ -87,4 +89,25 @@ export async function solicitudes(req, res) {
   } else mensajeroId = fichaPropia(req.usuario); // lo que mande la petición no cuenta
   const r = await Caja.recogidasPendientes({ mensajeroId, pagina: page, porPagina: limit });
   res.json({ data: r.registros, total: r.total, page: r.pagina, totalPages: r.paginas });
+}
+
+/** POST /patinador/solicitudes/:guia/recogido: el patinador marca que ya tiene el paquete (la guía sigue "aceptado" hasta el QR). */
+export async function marcarRecogido(req, res) {
+  res.json(await Traspasos.marcarRecogido(ctxDe(req), req.valido.params.guia));
+}
+
+/** DELETE /patinador/solicitudes/:guia/recogido: deshace una recogida marcada por error (si nadie canjeó el QR). */
+export async function deshacerRecogido(req, res) {
+  res.json(await Traspasos.deshacerRecogido(ctxDe(req), req.valido.params.guia));
+}
+
+/** GET /patinador/recogidas: recogidas que esperan a un mensajero. El patinador ve las suyas; la oficina todas o las de `mensajeroId`. */
+export async function recogidas(req, res) {
+  const patinadorId = esOficina(req.usuario) ? (req.valido.query.mensajeroId || null) : fichaPropia(req.usuario);
+  res.json({ data: await Recogida.pendientes({ patinadorId }) });
+}
+
+/** POST /patinador/recogidas/:guia/qr (oficina): genera el QR (reemplaza el anterior). { codigo, vence }: el código no se puede volver a ver. */
+export async function generarQr(req, res) {
+  res.status(201).json({ qr: await Traspasos.generarQr(ctxDe(req), req.valido.params.guia) });
 }

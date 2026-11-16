@@ -108,7 +108,8 @@ export async function resumenDe(mensajeroId, db = { query }) {
 const RECOGIDAS = `
   FROM pedidos p JOIN solicitudes s ON s.guia = p.guia
   LEFT JOIN clientes c ON c.id = p.cliente_id
-  WHERE p.mensajero_id = $1 AND p.estado = 'aceptado'`;
+  WHERE p.mensajero_id = $1 AND p.estado = 'aceptado'
+    AND NOT EXISTS (SELECT 1 FROM recogidas_patinador r WHERE r.guia = p.guia)`; // las ya recogidas esperan al mensajero (recogidasPendientes del QR)
 
 /** Las que tiene por recoger, de la más antigua a la más nueva (la que lleva más tiempo esperando va primero), por páginas. */
 export async function recogidasPendientes({ mensajeroId, pagina = 1, porPagina = 10 }) {

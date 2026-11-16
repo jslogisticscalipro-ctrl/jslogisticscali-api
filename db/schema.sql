@@ -506,3 +506,24 @@ CREATE INDEX IF NOT EXISTS pedidos_mensajero_n_idx ON pedidos (mensajero_id, n D
 CREATE INDEX IF NOT EXISTS pedidos_entregado_idx ON pedidos (entregado DESC) WHERE entregado IS NOT NULL;
 -- Guías sin remitente (contador de la oficina y filtro "Sin remitente").
 CREATE INDEX IF NOT EXISTS pedidos_sin_remitente_idx ON pedidos (n DESC) WHERE cliente_id IS NULL;
+
+-- ---------- Recogida con patinador y traspaso por QR (2026-11-16) ----------
+-- Una fila por guía que un patinador marcó como recogida. La guía sigue "aceptado" y a nombre del patinador hasta que un
+-- mensajero canjea el QR: ahí cambia pedidos.mensajero_id y la fila se cierra (traspasado_*). No hay estado nuevo en pedidos.
+-- Del QR solo se guarda el HMAC del código (nunca el código); generar otro lo reemplaza, así que hay un solo QR vivo por guía.
+CREATE TABLE IF NOT EXISTS recogidas_patinador (
+  guia            TEXT PRIMARY KEY REFERENCES pedidos(guia) ON DELETE CASCADE,
+  patinador_id    TEXT NOT NULL REFERENCES mensajeros(id) ON DELETE RESTRICT,
+  recogido_en     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  recogido_uid    TEXT REFERENCES usuarios(id) ON DELETE SET NULL,
+  codigo_hash     TEXT,
+  codigo_vence    TIMESTAMPTZ,
+  codigo_uid      TEXT REFERENCES usuarios(id) ON DELETE SET NULL,
+  codigo_creado   TIMESTAMPTZ,
+  traspasado_a    TEXT REFERENCES mensajeros(id) ON DELETE SET NULL,
+  traspasado_en   TIMESTAMPTZ,
+  traspasado_uid  TEXT REFERENCES usuarios(id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS recogidas_patinador_codigo_idx ON recogidas_patinador (codigo_hash) WHERE codigo_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS recogidas_patinador_pend_idx ON recogidas_patinador (recogido_en) WHERE traspasado_en IS NULL;
+ALTER TABLE recogidas_patinador ENABLE ROW LEVEL SECURITY;

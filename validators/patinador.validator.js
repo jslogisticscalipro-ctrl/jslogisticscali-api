@@ -28,3 +28,8 @@ export const solicitudes = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(10)
 });
+
+/** Recogidas que esperan a un mensajero: la oficina dice de cuál patinador (opcional); el patinador ve las suyas. */
+export const recogidas = z.object({ mensajeroId: id.optional() });
+
+export const paramGuiaRecogida = z.object({ guia: z.string().trim().regex(/^JS-\d{5,}$/, "Guía inválida") });
