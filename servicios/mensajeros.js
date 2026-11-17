@@ -1,5 +1,5 @@
 /* Mensajeros: dinero que entregan (recaudos), período abierto y liquidaciones. */
-import { Recaudos, Mensajeros, Liquidaciones } from "../models/documentos.js";
+import { Recaudos, Mensajeros, Liquidaciones, Pedidos, Clientes } from "../models/documentos.js";
 import { nuevoId } from "../helpers/ids.js";
 import { paginaEnParalelo, filaAObjeto } from "../helpers/sql.js";
 import { ahora } from "../helpers/reloj.js";
@@ -35,6 +35,24 @@ export async function paginaLiquidaciones(ctx, { pagina, porPagina, dia, estado 
     )).rows
   });
   return { liquidaciones: r.filas.map(f => Liquidaciones.aDocumento(f)), pagina: r.pagina, porPagina: tam, total: r.total, paginas: r.paginas };
+}
+
+/** Una liquidación con sus entregas (las guías que cerró) y si es la última de su mensajero, leyendo solo eso: la ventana
+    de detalle no necesita tener todas las liquidaciones ni todos los pedidos en memoria. Una liquidación vieja sin lista
+    de guías (`guias` NULL) responde sin entregas, igual que antes. `clientes` trae el nombre de cada remitente. */
+export async function detalleLiquidacion(ctx, id) {
+  exigirAdmin(ctx.actor);
+  const liquidacion = await Liquidaciones.obtener(ctx.db, id);
+  if (!liquidacion) throw noEncontrado("Esa liquidación ya no existe.");
+  const guias = liquidacion.guias || [];
+  const [entregas, ultima] = await Promise.all([
+    guias.length ? Pedidos.listar(ctx.db, { filtro: { guia: { in: guias } } }) : [],
+    Liquidaciones.listar(ctx.db, { filtro: { mensajeroId: liquidacion.mensajeroId }, orden: "fecha desc", limite: 1 })
+  ]);
+  const ids = [...new Set(entregas.map(p => p.clienteId).filter(Boolean))];
+  const clientes = {};
+  if (ids.length) for (const c of await Clientes.listar(ctx.db, { filtro: { id: { in: ids } } })) clientes[c.id] = c.nombre || "";
+  return { liquidacion, entregas, clientes, esUltima: ultima[0]?.id === id };
 }
 
 function vistaPeriodo(calc, mid) {
