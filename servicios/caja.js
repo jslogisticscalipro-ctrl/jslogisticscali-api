@@ -155,7 +155,8 @@ export async function movimientoCuenta(ctx, cuentaId, datos) {
   return enTransaccion(ctx, async t => {
     const cu = await Cuentas.obtener(t.c, cuentaId);
     if (!cu) throw noEncontrado("Esa cuenta ya no existe.");
-    const calc = await calculosDe(t.c, ["cajamovs"]);
+    // Solo se valida el día contra el último arqueo: basta la hora del corte (una consulta), no toda la caja.
+    const calc = await calculosDeCorte(t.c);
     exigirDiaAbierto(calc, dia);
     const mov = await Cajamovs.guardar(t.c, { id: nuevoId(), tipo, cat: "interna", cuentaId, personaId: "", valor, medio: datos.medio, concepto, fecha: calc.fechaCaja(dia), porUid: a.uid, porNombre: a.nombre });
     t.cambios.add("cajamovs");
@@ -370,6 +371,8 @@ export async function paginaInternos(ctx, { dia, medio, pagina, porPagina } = {}
   exigirOficina(ctx.actor);
   if (dia && !esDia(dia)) throw datosInvalidos("El día no es válido (AAAA-MM-DD).");
   if (medio && !MEDIOS[medio]) throw datosInvalidos("El medio no es válido.");
-  const movs = await Cajamovs.listar(ctx.db);
+  // La base devuelve solo los de cuentas internas (y del medio elegido); el día, el orden y la página siguen en
+  // armarPaginaInternos, así el resultado es el mismo de antes (lo prueba test/cuentas-internas.test.js).
+  const movs = await Cajamovs.listar(ctx.db, { filtro: { cat: "interna", ...(medio ? { medio } : {}) } });
   return armarPaginaInternos(movs, { dia, medio, pagina, porPagina });
 }
