@@ -4,7 +4,7 @@ import { Movimientos, Recaudos, Clientes, Mensajeros } from "../models/documento
 import { MOVS, MOVS_OFICINA, MEDIOS, VENTANA_CORRECCION_MS } from "../helpers/constantes.js";
 import { nuevoId } from "../helpers/ids.js";
 import { ahora } from "../helpers/reloj.js";
-import { hora, fechaDia, esDia, diaDe } from "../helpers/fechas.js";
+import { hora, fechaDia, esDia, diaDe, mediodia } from "../helpers/fechas.js";
 import { sinTildes } from "../helpers/texto.js";
 import { datosInvalidos, noEncontrado, permisoNegado, yaContadoError } from "./errores.js";
 import { enTransaccion, guardar, actualizar, borrar } from "./transaccion.js";
@@ -202,11 +202,24 @@ function diasValidos({ desde, hasta }) {
   for (const d of [desde, hasta]) if (d && !esDia(d)) throw datosInvalidos("El día no es válido (AAAA-MM-DD).");
 }
 
+/** Lo que necesitan la lista y Ganancias de Cuentas, leído de la base con un primer filtro: solo los tipos de oficina,
+    el rango de fechas con dos días de margen a cada lado (el día exacto, en hora de Colombia, lo decide armar…) y solo
+    los clientes que aparecen. armarPaginaMovimientos y armarGananciasPorCliente vuelven a filtrar todo, así que la
+    respuesta es la misma que leyendo las tablas completas (lo prueba test/movimientos-oficina.test.js). */
+async function leerOficina(c, { desde, hasta } = {}) {
+  const margen = 2 * 864e5;
+  const rango = desde || hasta ? { campo: "fecha", desde: desde ? mediodia(desde) - margen : null, hasta: hasta ? mediodia(hasta) + margen : null } : undefined;
+  const movs = await Movimientos.listar(c, { filtro: { tipo: { in: MOVS_OFICINA } }, rango });
+  const ids = [...new Set(movs.map(m => m.clienteId).filter(Boolean))];
+  const clientes = ids.length ? await Clientes.listar(c, { filtro: { id: { in: ids } } }) : [];
+  return { movs, clientes };
+}
+
 /** GET /movimientos/pagina: la pestaña Movimientos de Cuentas, filtrada y por páginas. */
 export async function paginaOficina(ctx, filtros = {}) {
   exigirOficina(ctx.actor);
   diasValidos(filtros);
-  const [movs, clientes] = await Promise.all([Movimientos.listar(ctx.db), Clientes.listar(ctx.db)]);
+  const { movs, clientes } = await leerOficina(ctx.db, filtros);
   return armarPaginaMovimientos(movs, clientes, filtros);
 }
 
@@ -214,6 +227,6 @@ export async function paginaOficina(ctx, filtros = {}) {
 export async function gananciasPorCliente(ctx, filtros = {}) {
   exigirOficina(ctx.actor);
   diasValidos(filtros);
-  const [movs, clientes] = await Promise.all([Movimientos.listar(ctx.db), Clientes.listar(ctx.db)]);
+  const { movs, clientes } = await leerOficina(ctx.db, filtros);
   return armarGananciasPorCliente(movs, clientes, filtros);
 }

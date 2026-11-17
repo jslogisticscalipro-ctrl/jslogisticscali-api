@@ -102,10 +102,17 @@ export function crearModelo({ col, tabla = col, pk, campos, extra = false, actua
       const r = await c.query(`SELECT * FROM ${tabla} WHERE ${pkCol} = $1${fijo}${bloquear ? " FOR UPDATE" : ""}`, [id]);
       return aDocumento(r.rows[0]);
     },
-    /** filtro: { campo: valor | { in: [...] } } o una lista de esos objetos (se unen con "o"). */
-    async listar(c, { filtro, orden, limite } = {}) {
+    /** filtro: { campo: valor | { in: [...] } } o una lista de esos objetos (se unen con "o").
+        rango: { campo, desde?, hasta? } en ms, inclusivo, sobre un campo de fecha (se suma con "y" al filtro). */
+    async listar(c, { filtro, orden, limite, rango } = {}) {
       const params = [];
       let sql = `SELECT * FROM ${tabla} WHERE true${fijo}` + construirDonde(filtro, params);
+      if (rango) {
+        const d = porCampo[rango.campo];
+        if (!d) throw new Error(`Campo desconocido en ${tabla}: ${rango.campo}`);
+        if (rango.desde != null) { params.push(new Date(rango.desde)); sql += ` AND ${d.columna} >= $${params.length}`; }
+        if (rango.hasta != null) { params.push(new Date(rango.hasta)); sql += ` AND ${d.columna} <= $${params.length}`; }
+      }
       if (orden) { const [k, dir] = orden.split(" "); sql += ` ORDER BY ${porCampo[k].columna}${dir === "desc" ? " DESC" : ""}`; }
       if (limite) { params.push(limite); sql += ` LIMIT $${params.length}`; }
       return (await c.query(sql, params)).rows.map(aDocumento);
