@@ -354,6 +354,7 @@ Lo ya contado en un arqueo no se cambia: responde `409 YA_CONTADO` con el texto 
 | `POST /caja/arqueos` | admin | `{ contado: { efectivo, nequi, bancolombia }, nota }`. Lo esperado lo calcula el servidor (si llega, se ignora). → `{ arqueo: { id, fecha, dif, esperado, contado, resultado, movimientos } }`; `movimientos` son los documentos de caja que guardó (el conteo y sus diferencias) |
 | `DELETE /caja/arqueos/:id` | admin | Deshace el último arqueo |
 | `POST /caja/adelantos/:id/devolucion`, `DELETE /caja/adelantos/:id` | admin | Devolución (todo o parte) y quitar un adelanto |
+| `GET /cuentas/resumen` | oficina | Lo que muestra Cuentas → Cuentas sin bajar las guías: `{ resumen: { total, porMedio, disponible, cuentas: [{ id, nombre, tipo, saldo, estado: { txt, valor } }] } }`. Las cifras son las de `GET /caja/resumen` y el estado de cada cuenta es el mismo de `GET /cuentas` (la Base de JS cuenta los gastos cargados a ella) |
 | `GET /cuentas`, `POST /cuentas`, `POST /cuentas/iniciales`, `POST /cuentas/:id/movimientos` | oficina (crear: admin) | Cuentas internas con su saldo. Los gastos de caja (`cat: "gasto"`) salen de la cuenta de tipo `base` (Base de JS): `POST /caja/movimientos` les guarda `cuentaId` y aparecen en sus movimientos (siguen siendo gasto en la caja). Los gastos viejos sin `cuentaId` no cuentan |
 | `GET /jornadas` | equipo (cada quien, lo suyo) | Días de pago fijo |
 | `PUT /jornadas/:id`, `DELETE /jornadas/:id` | admin | `{ personaId, dia, valor, previo? }`. El ID lo arma el servidor |

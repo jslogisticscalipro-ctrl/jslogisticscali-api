@@ -3,6 +3,8 @@ import * as C from "../servicios/caja.js";
 import { responder, diaDeFecha } from "./accion.js";
 
 export const listar = responder(ctx => C.cuentas(ctx), { clave: "cuentas" });
+/** GET /cuentas/resumen: { resumen: { total, porMedio, disponible, cuentas } }. */
+export const resumen = responder(ctx => C.resumenCuentas(ctx), { clave: "resumen" });
 export const crear = responder((ctx, req) => C.crearCuenta(ctx, req.valido.body), { clave: "cuenta", status: 201 });
 export const iniciales = responder(ctx => C.crearCuentasIniciales(ctx), { clave: "cuentas", status: 201 });
 export const movimiento = responder((ctx, req) => {

@@ -117,6 +117,21 @@ export async function cuentas(ctx) {
     return { ...cu, saldo: s, estado, movimientos: calc.movsCuenta(cu.id).slice(0, 60) };
   });
 }
+/** Lo que muestra Cuentas → Cuentas: las cifras de la caja (total, por medio y lo disponible de JS) y el saldo de cada cuenta
+    interna, calculados aquí para que la pantalla no tenga que bajar todas las guías. La oficina (también el asistente) lo ve
+    en la app; por eso no es GET /caja/resumen, que es solo de administración y trae más cosas. La Base de JS cuenta los
+    gastos cargados a ella (deCuenta), igual que GET /cuentas. */
+export async function resumenCuentas(ctx) {
+  exigirOficina(ctx.actor);
+  const calc = await calculosDe(ctx.db);
+  const { total, porMedio, disponible } = calc.resumenCaja();
+  const cuentas = calc.listaOrdenada(calc.S.cuentas, "nombre").map(cu => {
+    const s = calc.saldoCuenta(cu.id);
+    const estado = cu.tipo === "base" ? { txt: "Base actual", valor: -s } : s > 0 ? { txt: "Te debe", valor: s } : s < 0 ? { txt: "Tiene a favor", valor: -s } : { txt: "En cero", valor: 0 };
+    return { id: cu.id, nombre: cu.nombre, tipo: cu.tipo, saldo: s, estado };
+  });
+  return { total, porMedio, disponible, cuentas };
+}
 export async function crearCuenta(ctx, { nombre, tipo }) {
   exigirAdmin(ctx.actor);
   const n = texto(nombre, 80);

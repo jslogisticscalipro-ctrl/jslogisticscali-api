@@ -7,6 +7,7 @@ import { permitir, OFICINA } from "../middleware/autorizar.js";
 // Cuentas internas: socios (JS Envíos, MT) y la base de JS.
 const r = Router();
 r.get("/", permitir(OFICINA), C.listar);
+r.get("/resumen", permitir(OFICINA), C.resumen);
 r.post("/", permitir("admin"), validar({ body: V.cuenta }), C.crear);
 r.post("/iniciales", permitir("admin"), C.iniciales);
 r.post("/:id/movimientos", permitir(OFICINA), validar({ params: V.paramId, body: V.movCuenta }), C.movimiento);
