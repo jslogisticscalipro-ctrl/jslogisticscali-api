@@ -47,6 +47,27 @@ export async function calculosDeMensajero(c, mid) {
   return crearCalculos(S, { corteRemoto: 0 });
 }
 
+/** Los cálculos de la caja de UNA oficina (`cajaOficina(auid)`) leyendo solo lo de esa persona: sus movimientos de caja
+    (cierres, sobrantes, bases que dio, cuentas internas), las entregas y pagos que recibió y los domicilios que pagó.
+    Da lo mismo que `calculosDe` para `cajaOficina(auid)` (lo prueba test/caja-respuestas.test.js); para otra cosa, usa `calculosDe`. */
+export async function calculosDeOficina(c, auid) {
+  const S = Object.fromEntries(COLS_ESTADO.map(k => [k, {}]));
+  const poner = (col, docs) => { const mod = MODELOS[col]; for (const d of docs) S[col][d[mod.pk]] = d; };
+  const todo = col => MODELOS[col].listar(c);
+  const filtrado = (col, filtro) => MODELOS[col].listar(c, { filtro });
+  const lecturas = [
+    ["mensajeros", () => todo("mensajeros")], ["clientes", () => todo("clientes")], ["cuentas", () => todo("cuentas")],
+    ["cajamovs", () => filtrado("cajamovs", [{ personaUid: auid }, { porUid: auid }])],
+    ["recaudos", () => filtrado("recaudos", { porUid: auid })],
+    ["movimientos", () => filtrado("movimientos", { porUid: auid })],
+    ["pedidos", () => filtrado("pedidos", { domiPagoUid: auid })]
+  ];
+  // pg no deja dos consultas a la vez dentro de una transacción (un solo cliente).
+  if (enTransaccion(c)) for (const [col, f] of lecturas) poner(col, await f());
+  else for (const [col, docs] of await Promise.all(lecturas.map(async ([col, f]) => [col, await f()]))) poner(col, docs);
+  return crearCalculos(S, { corteRemoto: 0 });
+}
+
 /** Las mismas cuentas del arqueo (yaContado, fechaCaja, diaAntesDelArqueo, textoContado…) sin cargar toda la caja:
     basta con la hora del último arqueo, que sale de una sola consulta (Meta.corteCompleto). Úsalo cuando solo se
     valida una fecha contra lo ya contado; si hace falta algo más de la caja, usa calculosDe. */

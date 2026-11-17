@@ -9,7 +9,7 @@ import { pesos } from "../helpers/texto.js";
 import { datosInvalidos, noEncontrado, permisoNegado, conflicto, yaContadoError } from "./errores.js";
 import { enTransaccion, guardar, actualizar, borrar } from "./transaccion.js";
 import { registrar } from "./historial.js";
-import { calculosDe, calculosDeCorte, exigirAdmin, exigirOficina, valorPositivo, medioValido, diaValido, texto, exigirNoContado, exigirDiaAbierto, numero } from "./contexto.js";
+import { calculosDe, calculosDeCorte, calculosDeOficina, exigirAdmin, exigirOficina, valorPositivo, medioValido, diaValido, texto, exigirNoContado, exigirDiaAbierto, numero } from "./contexto.js";
 import { netoArqueo, resultadoArqueo, valorAdel, cambioPendiente, crearCalculos } from "../helpers/calculos.js";
 
 /* ---------- resumen, libro y cierre del día (administración) ---------- */
@@ -72,10 +72,11 @@ export async function registrarMovimiento(ctx, datos) {
     if (CATS_PERSONA.includes(cat) && !(per && (await Mensajeros.existe(t.c, per)))) throw datosInvalidos("Elige la persona");
     const semana = CATS_SEMANA.includes(cat) ? datos.semana || "" : "";
     if (CATS_SEMANA.includes(cat) && !esDia(semana)) throw datosInvalidos("Elige la semana del sueldo");
-    const calc = await calculosDe(t.c, ["cajamovs", "cuentas"]);
+    // Solo hace falta la hora del último arqueo y, en los gastos, las cuentas (no todos los movimientos de caja).
+    const calc = await calculosDeCorte(t.c);
     exigirDiaAbierto(calc, dia);
     // Los gastos salen de la Base de JS: quedan cargados a la cuenta de tipo "base" (si no hay, se guardan como antes).
-    const base = cat === "gasto" ? calc.cuentaBase() : null;
+    const base = cat === "gasto" ? (await Cuentas.listar(t.c)).filter(cu => cu.tipo === "base").sort((a, b) => String(a.id).localeCompare(String(b.id)))[0] : null;
     return guardar(t, "cajamovs", { id: nuevoId(), tipo, cat, personaId: per, valor, medio: datos.medio, concepto: texto(datos.concepto, 300), fecha: calc.fechaCaja(dia), semana, ...(base ? { cuentaId: base.id } : {}) });
   });
 }
@@ -102,8 +103,7 @@ export async function baseDesdeOficina(ctx, { mensajeroId, valor, concepto }) {
   return enTransaccion(ctx, async t => {
     if (!(await Mensajeros.existe(t.c, mensajeroId))) throw datosInvalidos("Elige el mensajero");
     const mov = await guardar(t, "cajamovs", { id: nuevoId(), tipo: "sale", cat: "base", personaId: mensajeroId, valor: val, medio: "efectivo", concepto: texto(concepto, 200), fecha: ahora(), semana: "", porUid: a.uid, porNombre: a.nombre });
-    const calc = await calculosDe(t.c);
-    return { movimiento: mov, quedaEfectivo: calc.cajaOficina(a.uid).saldo.efectivo };
+    return { movimiento: mov };
   });
 }
 
@@ -204,8 +204,7 @@ export async function cierreOficina(ctx, auid, datos) {
   if (entregas.some(([, v]) => v < 0)) throw datosInvalidos("Los valores no pueden ser negativos");
   return enTransaccion(ctx, async t => {
     const u = await asistente(t.c, auid);
-    const calc = await calculosDe(t.c);
-    const C = calc.cajaOficina(auid);
+    const C = (await calculosDeOficina(t.c, auid)).cajaOficina(auid);
     const excesos = entregas.map(([m, v]) => [m, Math.round(v - C.saldo[m])]).filter(([, x]) => x > 0);
     const sobs = excesos.filter(([m]) => m === "efectivo"), nivs = excesos.filter(([m]) => m !== "efectivo"), vals = entregas.filter(([, v]) => v > 0);
     if (!vals.length && !sobs.length && !nivs.length) throw datosInvalidos("Escribe un valor mayor a cero");
