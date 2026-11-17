@@ -76,6 +76,10 @@ test("recaudos y liquidación: lo que entrega el mensajero baja lo que debe; liq
   assert.equal(liq.status, 201, JSON.stringify(liq.body));
   assert.equal(liq.body.liquidacion.debe, 0);
   assert.deepEqual(liq.body.liquidacion.guias, [guia]);
+  // La respuesta trae la entrega final que se guardó (la app la pone en pantalla sin recargar todo).
+  assert.equal(liq.body.recaudo.valor, d0 - 20000);
+  assert.equal(liq.body.recaudo.mensajeroId, m1.id);
+  assert.equal(liq.body.movAdelanto, null);
   assert.equal(await debe(), 0);
   assert.equal((await asistente.post("/api/liquidaciones").send({ mensajeroId: m1.id })).status, 403);
   assert.equal((await mensajero.get("/api/liquidaciones")).body.liquidaciones.length, 1);

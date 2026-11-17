@@ -164,16 +164,17 @@ export async function liquidar(ctx, { mensajeroId: mid, entregaFinal, medio = "e
     const adelanto = d => (d > 0 && pasarAdelanto ? Math.max(0, Math.min(d, Math.round(calc.sueldoPersonaSemana(mid, sem).neto))) : 0);
 
     const t0 = ahora();
-    if (val > 0) await guardar(t, "recaudos", { id: nuevoId(), mensajeroId: mid, valor: val, medio, nota: "Liquidación", fecha: t0 });
+    const recaudo = val > 0 ? await guardar(t, "recaudos", { id: nuevoId(), mensajeroId: mid, valor: val, medio, nota: "Liquidación", fecha: t0 }) : null;
     const fecha = Math.max(ahora(), t0 + 1), id = mid + "_" + fecha, queda = pm.debe - val, adel = adelanto(queda);
     const liquidacion = await guardar(t, "liquidaciones", {
       id, mensajeroId: mid, desde: pm.desde, fecha, dia: diaDe(fecha), entregas: pm.ps.length, guias: pm.ps.map(p => p.guia),
       efectivo: tt.efectivo, base: pm.base, gastos: pm.gastos, cobros: pm.cobros, anterior: pm.anterior, recibidoAntes: pm.recibido, entregaFinal: val,
       recibido: pm.recibido + val, debe: queda - adel, adelanto: adel, ajuste: pm.ajuste, transfJs: tt.transfJs, transfCli: tt.transfCli, sueldo, enRuta
     });
-    if (adel) // la plata ya la tiene el mensajero: es un adelanto que no sale de la caja (ver libroCaja) y se descuenta del sueldo de esa semana
-      await guardar(t, "cajamovs", { id: nuevoId(), tipo: "sale", cat: "adelanto", personaId: mid, valor: adel, medio: "efectivo", concepto: "Lo que quedó debiendo en la liquidación del " + hora(fecha), fecha, semana: sem, deLiquidacion: id });
-    return { liquidacion, adelanto: adel, queda };
+    const movAdelanto = adel ? // la plata ya la tiene el mensajero: es un adelanto que no sale de la caja (ver libroCaja) y se descuenta del sueldo de esa semana
+      await guardar(t, "cajamovs", { id: nuevoId(), tipo: "sale", cat: "adelanto", personaId: mid, valor: adel, medio: "efectivo", concepto: "Lo que quedó debiendo en la liquidación del " + hora(fecha), fecha, semana: sem, deLiquidacion: id }) : null;
+    // `recaudo` y `movAdelanto` se devuelven para que la app los ponga en pantalla sin volver a bajar todo.
+    return { liquidacion, adelanto: adel, queda, recaudo, movAdelanto };
   });
 }
 
