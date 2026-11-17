@@ -201,12 +201,18 @@ export const Pedidos = {
   },
   /** Sin intentos, salvo que se pidan: para los cálculos no hacen falta. */
   async listar(c, { filtro, intentos = false } = {}) {
-    const params = [], cond = [];
-    for (const [k, v] of Object.entries(filtro || {})) {
-      const d = pedidosBase.campos[k];
-      if (v && typeof v === "object" && "in" in v) { params.push(v.in); cond.push(`p.${d.columna} = ANY($${params.length})`); }
-      else { params.push(v); cond.push(`p.${d.columna} = $${params.length}`); }
+    const params = [], grupos = [];
+    // filtro: un objeto (se cumple todo) o una lista de objetos (se cumple alguno), como en los demás modelos.
+    for (const g of Array.isArray(filtro) ? filtro : [filtro || {}]) {
+      const conds = [];
+      for (const [k, v] of Object.entries(g)) {
+        const d = pedidosBase.campos[k];
+        if (v && typeof v === "object" && "in" in v) { params.push(v.in); conds.push(`p.${d.columna} = ANY($${params.length})`); }
+        else { params.push(v); conds.push(`p.${d.columna} = $${params.length}`); }
+      }
+      grupos.push(conds.length ? "(" + conds.join(" AND ") + ")" : "true");
     }
+    const cond = grupos.length > 1 ? ["(" + grupos.join(" OR ") + ")"] : grupos[0] === "true" ? [] : grupos;
     const r = await c.query(`SELECT p.*, c.nombre AS cliente_nombre${intentos ? ", " + INTENTOS : ""} FROM pedidos p LEFT JOIN clientes c ON c.id = p.cliente_id
       ${cond.length ? "WHERE " + cond.join(" AND ") : ""} ORDER BY p.n`, params);
     return r.rows.map(f => { const d = pedidosBase.aDocumento(f); return intentos ? conIntentos({ ...d, _intentos: f.intentos }) : d; });

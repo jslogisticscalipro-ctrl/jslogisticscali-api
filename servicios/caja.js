@@ -9,7 +9,7 @@ import { pesos } from "../helpers/texto.js";
 import { datosInvalidos, noEncontrado, permisoNegado, conflicto, yaContadoError } from "./errores.js";
 import { enTransaccion, guardar, actualizar, borrar } from "./transaccion.js";
 import { registrar } from "./historial.js";
-import { calculosDe, calculosDeCorte, calculosDeOficina, exigirAdmin, exigirOficina, valorPositivo, medioValido, diaValido, texto, exigirNoContado, exigirDiaAbierto, numero } from "./contexto.js";
+import { calculosDe, calculosDeCorte, calculosDeOficina, calculosDeArqueo, exigirAdmin, exigirOficina, valorPositivo, medioValido, diaValido, texto, exigirNoContado, exigirDiaAbierto, numero } from "./contexto.js";
 import { netoArqueo, resultadoArqueo, valorAdel, cambioPendiente, crearCalculos } from "../helpers/calculos.js";
 
 /* ---------- resumen, libro y cierre del día (administración) ---------- */
@@ -220,8 +220,7 @@ export async function cierreOficina(ctx, auid, datos) {
 /* ---------- arqueo ---------- */
 export async function esperadoArqueo(ctx) {
   exigirAdmin(ctx.actor);
-  const calc = await calculosDe(ctx.db);
-  const x = calc.esperadoArqueo();
+  const x = (await calculosDeArqueo(ctx.db)).esperadoArqueo();
   return { esperado: x.e, oficina: x.of, sinCuenta: x.sinCuenta, total: Object.values(x.e).reduce((a, b) => a + b, 0) };
 }
 /** Guardar el arqueo: la diferencia con lo esperado queda como faltante o sobrante por medio y, desde ese momento,
@@ -239,8 +238,7 @@ export async function hacerArqueo(ctx, datos) {
   }
   return enTransaccion(ctx, async t => {
     await t.c.query("select pg_advisory_xact_lock(4242)"); // un arqueo a la vez
-    const calc = await calculosDe(t.c);
-    const { e, of } = calc.esperadoArqueo();
+    const { e, of } = (await calculosDeArqueo(t.c)).esperadoArqueo();
     const aid = nuevoId(), t0 = ahora(), nota = texto(datos.nota, 300), dif = {}, movs = [];
     for (const k of Object.keys(MEDIOS)) {
       const d = contado[k] - e[k];

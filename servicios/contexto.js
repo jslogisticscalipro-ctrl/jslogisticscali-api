@@ -68,6 +68,23 @@ export async function calculosDeOficina(c, auid) {
   return crearCalculos(S, { corteRemoto: 0 });
 }
 
+/** Lo que necesita el arqueo (`esperadoArqueo`, `arqueosCaja`): el libro de caja y la caja de cada asistente. De los pedidos
+    solo cuentan las guías con transferencia a JS y las de domicilio pagado; el resto no entra al libro. No carga jornadas ni
+    liquidaciones. Da lo mismo que `calculosDe` para `esperadoArqueo()` (lo prueba test/arqueo-esperado.test.js); para
+    cualquier otra cuenta usa `calculosDe`. */
+export async function calculosDeArqueo(c) {
+  const S = Object.fromEntries(COLS_ESTADO.map(k => [k, {}]));
+  const poner = (col, docs) => { const mod = MODELOS[col]; for (const d of docs) S[col][d[mod.pk]] = d; };
+  const lecturas = [
+    ...["mensajeros", "clientes", "cuentas", "usuarios", "recaudos", "movimientos", "cajamovs"].map(col => [col, () => MODELOS[col].listar(c)]),
+    ["pedidos", () => MODELOS.pedidos.listar(c, { filtro: [{ metodo: "transf_js" }, { domiPagado: true }] })]
+  ];
+  // pg no deja dos consultas a la vez dentro de una transacción (un solo cliente).
+  if (enTransaccion(c)) for (const [col, f] of lecturas) poner(col, await f());
+  else for (const [col, docs] of await Promise.all(lecturas.map(async ([col, f]) => [col, await f()]))) poner(col, docs);
+  return crearCalculos(S, { corteRemoto: 0 });
+}
+
 /** Las mismas cuentas del arqueo (yaContado, fechaCaja, diaAntesDelArqueo, textoContado…) sin cargar toda la caja:
     basta con la hora del último arqueo, que sale de una sola consulta (Meta.corteCompleto). Úsalo cuando solo se
     valida una fecha contra lo ya contado; si hace falta algo más de la caja, usa calculosDe. */
