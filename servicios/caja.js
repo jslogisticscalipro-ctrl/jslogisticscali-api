@@ -9,7 +9,7 @@ import { pesos } from "../helpers/texto.js";
 import { datosInvalidos, noEncontrado, permisoNegado, conflicto, yaContadoError } from "./errores.js";
 import { enTransaccion, guardar, actualizar, borrar } from "./transaccion.js";
 import { registrar } from "./historial.js";
-import { calculosDe, exigirAdmin, exigirOficina, valorPositivo, medioValido, diaValido, texto, exigirNoContado, exigirDiaAbierto, numero } from "./contexto.js";
+import { calculosDe, calculosDeCorte, exigirAdmin, exigirOficina, valorPositivo, medioValido, diaValido, texto, exigirNoContado, exigirDiaAbierto, numero } from "./contexto.js";
 import { netoArqueo, resultadoArqueo, valorAdel, cambioPendiente, crearCalculos } from "../helpers/calculos.js";
 
 /* ---------- resumen, libro y cierre del día (administración) ---------- */
@@ -85,7 +85,7 @@ export async function quitarMovimiento(ctx, id) {
   return enTransaccion(ctx, async t => {
     const x = await Cajamovs.obtener(t.c, id, { bloquear: true });
     if (!x) throw noEncontrado("Ese movimiento ya no existe.");
-    exigirNoContado(await calculosDe(t.c, ["cajamovs"]), x.fecha);
+    exigirNoContado(await calculosDeCorte(t.c), x.fecha);
     const ad = x.cat === "devolucion" && x.adelantoId ? await Cajamovs.obtener(t.c, x.adelantoId) : null;
     if (ad) await actualizar(t, "cajamovs", ad.id, { devuelto: Math.max(0, (Number(ad.devuelto) || 0) - (Number(x.valor) || 0)) }, { antes: ad });
     await borrar(t, "cajamovs", id);

@@ -6,7 +6,7 @@ import { ahora } from "../helpers/reloj.js";
 import { diaDe, hora } from "../helpers/fechas.js";
 import { datosInvalidos, noEncontrado, permisoNegado, conflicto } from "./errores.js";
 import { enTransaccion, guardar, actualizar, borrar } from "./transaccion.js";
-import { calculosDe, exigirAdmin, exigirOficina, esMio, valorPositivo, medioValido, texto, exigirNoContado, numero } from "./contexto.js";
+import { calculosDe, calculosDeCorte, exigirAdmin, exigirOficina, esMio, valorPositivo, medioValido, texto, exigirNoContado, numero } from "./contexto.js";
 import * as CajaPatinador from "../models/cajaPatinador.model.js";
 import { totales, ganaPorcentaje, sueldoPedidos, tipoDe } from "../helpers/calculos.js";
 
@@ -130,7 +130,7 @@ export async function editarRecaudo(ctx, id, { valor, medio, nota }) {
   return enTransaccion(ctx, async t => {
     const r = await Recaudos.obtener(t.c, id, { bloquear: true });
     if (!r) throw noEncontrado("Esa entrega de dinero ya no existe.");
-    exigirNoContado(await calculosDe(t.c, ["cajamovs"]), r.fecha);
+    exigirNoContado(await calculosDeCorte(t.c), r.fecha);
     return actualizar(t, "recaudos", id, { valor: val, medio, nota: texto(nota, 200) }, { antes: r });
   });
 }
@@ -140,7 +140,7 @@ export async function quitarRecaudo(ctx, id) {
   return enTransaccion(ctx, async t => {
     const r = await Recaudos.obtener(t.c, id, { bloquear: true });
     if (!r) throw noEncontrado("Esa entrega de dinero ya no existe.");
-    exigirNoContado(await calculosDe(t.c, ["cajamovs"]), r.fecha);
+    exigirNoContado(await calculosDeCorte(t.c), r.fecha);
     await borrar(t, "recaudos", id);
     return { id, enPapelera: true };
   });

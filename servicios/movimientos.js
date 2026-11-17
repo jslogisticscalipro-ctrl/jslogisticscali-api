@@ -8,7 +8,7 @@ import { hora, fechaDia, esDia, diaDe } from "../helpers/fechas.js";
 import { sinTildes } from "../helpers/texto.js";
 import { datosInvalidos, noEncontrado, permisoNegado, yaContadoError } from "./errores.js";
 import { enTransaccion, guardar, actualizar, borrar } from "./transaccion.js";
-import { calculosDe, exigirAdmin, exigirOficina, valorPositivo, diaValido, texto, exigirNoContado, exigirDiaAbierto } from "./contexto.js";
+import { calculosDe, calculosDeCorte, exigirAdmin, exigirOficina, valorPositivo, diaValido, texto, exigirNoContado, exigirDiaAbierto } from "./contexto.js";
 import { esPago, mueveCaja, esRepartidor } from "../helpers/calculos.js";
 
 /** Valida y arma los datos comunes de crear y editar. soloHoy: el pago que registra el asistente queda con la hora del momento. */
@@ -23,7 +23,7 @@ async function armar(t, a, datos, soloHoy) {
   if (tipo === "pago_de_cliente" && !MEDIOS[medio]) throw datosInvalidos("Elige cómo pagó");
   if (tipo === "pago_a_cliente" && !MEDIOS[medio]) throw datosInvalidos("Elige cómo le pagas");
   if (medio && !MEDIOS[medio]) throw datosInvalidos("El medio no es válido.");
-  const calc = await calculosDe(t.c, ["cajamovs"]);
+  const calc = await calculosDeCorte(t.c);
   const caja = mueveCaja({ tipo });
   let fecha;
   if (soloHoy) fecha = ahora();
@@ -105,7 +105,7 @@ export async function eliminar(ctx, id) {
   return enTransaccion(ctx, async t => {
     const m = await Movimientos.obtener(t.c, id, { bloquear: true });
     if (!m) throw noEncontrado("Ese movimiento ya no existe.");
-    const calc = await calculosDe(t.c, ["cajamovs"]);
+    const calc = await calculosDeCorte(t.c);
     if (mueveCaja(m) && calc.yaContado(m.fecha) && !esPago(m)) throw yaContadoError(calc.textoContado());
     if (esPago(m)) return reversarPago(t, calc, m);
     await borrar(t, "movimientos", id);
@@ -119,7 +119,7 @@ export async function reversarPagos(ctx, { ids }) {
   const lista = [...new Set(ids || [])];
   if (!lista.length) throw datosInvalidos("No hay pagos para reversar.");
   return enTransaccion(ctx, async t => {
-    const calc = await calculosDe(t.c, ["cajamovs"]);
+    const calc = await calculosDeCorte(t.c);
     const out = [];
     for (const id of lista) {
       const m = await Movimientos.obtener(t.c, id, { bloquear: true });
@@ -142,7 +142,7 @@ export async function cambiarMedio(ctx, col, id, { medio }) {
     if (!x) throw noEncontrado("Ese registro ya no existe.");
     if (col === "movimientos" && !["pago_de_cliente", "pago_a_cliente", "compra_cliente"].includes(x.tipo)) throw datosInvalidos("Ese movimiento no tiene medio de pago.");
     if (!a.esAdmin && (x.porUid !== a.uid || ahora() - x.fecha >= VENTANA_CORRECCION_MS)) throw permisoNegado("Solo puedes corregir el medio de lo que registraste tú, hasta 24 horas después.");
-    exigirNoContado(await calculosDe(t.c, ["cajamovs"]), x.fecha);
+    exigirNoContado(await calculosDeCorte(t.c), x.fecha);
     if (medio === x.medio) return x;
     return actualizar(t, col, id, { medio, medioAntes: x.medioAntes || x.medio || "", medioCambio: ahora() }, { antes: x });
   });

@@ -23,6 +23,14 @@ export async function calculosDe(c, cols = COLS_ESTADO) {
   return crearCalculos(S, { corteRemoto });
 }
 
+/** Las mismas cuentas del arqueo (yaContado, fechaCaja, diaAntesDelArqueo, textoContado…) sin cargar toda la caja:
+    basta con la hora del último arqueo, que sale de una sola consulta (Meta.corteCompleto). Úsalo cuando solo se
+    valida una fecha contra lo ya contado; si hace falta algo más de la caja, usa calculosDe. */
+export async function calculosDeCorte(c) {
+  const S = await cargarEstado(c, []);
+  return crearCalculos(S, { corteRemoto: await Meta.corteCompleto(c) });
+}
+
 /* ---- permisos (equivalentes a las funciones de firestore.rules) ---- */
 export const exigirAdmin = a => { if (!a?.esAdmin) throw permisoNegado("Solo administración puede hacer esto."); };
 export const exigirOficina = a => { if (!a?.esOficina) throw permisoNegado("Solo la oficina puede hacer esto."); };
