@@ -251,8 +251,15 @@ export function crearCalculos(S, { corteRemoto = 0 } = {}) {
   const sinDescuento = (pid, dia) => !!S.jornadas?.[idSinDesc(pid, dia)]?.sinDescuento;
   const previoId = (pid, sem) => pid + "_previo_" + sem;
   const sueldoPrevio = (pid, sem) => Number(S.jornadas[previoId(pid, sem)]?.valor) || 0;
+  // Las guías cerradas agrupadas por día de sueldo, una sola vez por instancia (S no cambia mientras se calcula):
+  // una semana pide 7 días y el sueldo de cada persona vuelve a pedirlos, así que no se recorren todas las guías cada vez.
+  let pedidosPorDia = null;
+  const cerradasDelDia = dia => {
+    if (!pedidosPorDia) { pedidosPorDia = new Map(); for (const p of V("pedidos")) if (cerrado(p)) { const d = diaSueldo(p); (pedidosPorDia.get(d) || pedidosPorDia.set(d, []).get(d)).push(p); } }
+    return pedidosPorDia.get(dia) || [];
+  };
   function sueldosDia(dia) {
-    const ent = V("pedidos").filter(p => cerrado(p) && diaSueldo(p) === dia);
+    const ent = cerradasDelDia(dia);
     const res = {}, porM = {}; ent.forEach(p => (porM[p.mensajeroId] = porM[p.mensajeroId] || []).push(p));
     let dom30 = 0, propios = 0, desc = 0, fijos = 0, nMens = 0;
     for (const [mid, ps] of Object.entries(porM)) {
