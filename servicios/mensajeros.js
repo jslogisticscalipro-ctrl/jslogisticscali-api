@@ -6,7 +6,7 @@ import { ahora } from "../helpers/reloj.js";
 import { diaDe, hora } from "../helpers/fechas.js";
 import { datosInvalidos, noEncontrado, permisoNegado, conflicto } from "./errores.js";
 import { enTransaccion, guardar, actualizar, borrar } from "./transaccion.js";
-import { calculosDe, calculosDeCorte, exigirAdmin, exigirOficina, esMio, valorPositivo, medioValido, texto, exigirNoContado, numero } from "./contexto.js";
+import { calculosDe, calculosDeMensajero, calculosDeCorte, exigirAdmin, exigirOficina, esMio, valorPositivo, medioValido, texto, exigirNoContado, numero } from "./contexto.js";
 import * as CajaPatinador from "../models/cajaPatinador.model.js";
 import { totales, ganaPorcentaje, sueldoPedidos, tipoDe } from "../helpers/calculos.js";
 
@@ -36,7 +36,6 @@ export async function paginaLiquidaciones(ctx, { pagina, porPagina, dia, estado 
   });
   return { liquidaciones: r.filas.map(f => Liquidaciones.aDocumento(f)), pagina: r.pagina, porPagina: tam, total: r.total, paginas: r.paginas };
 }
-const COLS_SUELDO = ["pedidos", "recaudos", "cajamovs", "liquidaciones", "mensajeros", "jornadas", "movimientos"];
 
 function vistaPeriodo(calc, mid) {
   const m = calc.S.mensajeros[mid], pm = calc.periodoMensajero(mid), t = totales(pm.ps);
@@ -55,7 +54,7 @@ function vistaPeriodo(calc, mid) {
 export async function periodo(ctx, mid) {
   const a = ctx.actor;
   if (!a.esOficina && !esMio(a, mid)) throw permisoNegado();
-  const calc = await calculosDe(ctx.db, COLS_PERIODO);
+  const calc = await calculosDeMensajero(ctx.db, mid); // solo lo de este mensajero, no todo el sistema
   if (!calc.S.mensajeros[mid]) throw noEncontrado("Esa persona no está en Personal.");
   return vistaPeriodo(calc, mid);
 }
@@ -156,7 +155,7 @@ export async function liquidar(ctx, { mensajeroId: mid, entregaFinal, medio = "e
   return enTransaccion(ctx, async t => {
     const m = await Mensajeros.obtener(t.c, mid, { bloquear: true }); // una liquidación a la vez por mensajero
     if (!m) throw noEncontrado("Esa persona no está en Personal.");
-    const calc = await calculosDe(t.c, COLS_SUELDO);
+    const calc = await calculosDeMensajero(t.c, mid); // solo lo de este mensajero: el bloqueo dura menos
     const pm = calc.periodoMensajero(mid), tt = totales(pm.ps), sueldo = ganaPorcentaje(m) ? sueldoPedidos(pm.ps, calc.sinDescuento) : 0;
     const enRuta = Object.values(calc.S.pedidos).filter(p => p.estado === "pendiente" && p.mensajeroId === mid).length;
     const semanas = calc.semanasAdelanto().map(([w]) => w), sem = semana || semanas[0];

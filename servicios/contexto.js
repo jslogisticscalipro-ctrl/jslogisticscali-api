@@ -1,7 +1,7 @@
 /* Ayudas comunes de los servicios: quién hace la petición, cargar el estado para calcular y validar datos.
    Los servicios reciben ctx = { actor, db, eventos } (lo arma controllers/accion.js). */
-import { cargarEstado, COLS_ESTADO, Meta } from "../models/documentos.js";
-import { crearCalculos } from "../helpers/calculos.js";
+import { cargarEstado, COLS_ESTADO, Meta, enTransaccion, MODELOS } from "../models/documentos.js";
+import { crearCalculos, tipoDe } from "../helpers/calculos.js";
 import { datosInvalidos, permisoNegado, yaContadoError } from "./errores.js";
 import { esDia, hoy } from "../helpers/fechas.js";
 import { MEDIOS } from "../helpers/constantes.js";
@@ -21,6 +21,30 @@ export function actorDe(u) {
 export async function calculosDe(c, cols = COLS_ESTADO) {
   const S = await cargarEstado(c, cols), corteRemoto = await Meta.corte(c);
   return crearCalculos(S, { corteRemoto });
+}
+
+/** Los cálculos de UN mensajero (su período abierto, su sueldo de la semana, sus adelantos) leyendo solo lo suyo: sus
+    guías (y las de sus liquidaciones), recaudos, bases y adelantos, pagos que recibió en la calle, liquidaciones y
+    jornadas. Da lo mismo que `calculosDe` para `periodoMensajero(mid)`, `sueldoPersonaSemana(mid, …)`, `sinDescuento(mid, …)`
+    y `semanasAdelanto()` (lo prueba test/periodo-mensajero.test.js); cualquier otro cálculo (saldos, caja, otras personas)
+    debe usar `calculosDe`. El dueño y la oficina cobran lo que dejan los demás: para ellos se carga todo, como antes. */
+export async function calculosDeMensajero(c, mid) {
+  const mensajeros = await MODELOS.mensajeros.listar(c);
+  const m = mensajeros.find(x => x.id === mid);
+  if (["dueno", "oficina"].includes(tipoDe(m))) return calculosDe(c);
+  const S = Object.fromEntries(COLS_ESTADO.map(k => [k, {}]));
+  for (const x of mensajeros) S.mensajeros[x.id] = x;
+  const leer = async (col, filtro) => { const mod = MODELOS[col]; for (const d of await mod.listar(c, { filtro })) S[col][d[mod.pk]] = d; };
+  const lecturas = [
+    () => leer("liquidaciones", { mensajeroId: mid }), () => leer("recaudos", { mensajeroId: mid }), () => leer("cajamovs", { personaId: mid }),
+    () => leer("movimientos", { mensajeroId: mid }), () => leer("jornadas", { personaId: mid }), () => leer("pedidos", { mensajeroId: mid })
+  ];
+  // pg no deja dos consultas a la vez dentro de una transacción (un solo cliente).
+  if (enTransaccion(c)) for (const f of lecturas) await f(); else await Promise.all(lecturas.map(f => f()));
+  // Las guías de sus liquidaciones que hoy son de otra persona (si se reasignaron) también entran en el ajuste.
+  const otras = [...new Set(Object.values(S.liquidaciones).flatMap(l => l.guias || []))].filter(g => !S.pedidos[g]);
+  if (otras.length) for (const d of await MODELOS.pedidos.listar(c, { filtro: { guia: { in: otras } } })) S.pedidos[d.guia] = d;
+  return crearCalculos(S, { corteRemoto: 0 });
 }
 
 /** Las mismas cuentas del arqueo (yaContado, fechaCaja, diaAntesDelArqueo, textoContado…) sin cargar toda la caja:
