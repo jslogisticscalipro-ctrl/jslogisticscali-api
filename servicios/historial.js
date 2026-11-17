@@ -13,10 +13,21 @@ export async function registrar(t, texto, { col = null, id = null } = {}) {
   await Historial.agregar(t.c, { uid: a.uid || "", t: ahora(), a: texto, m: a.mensajeroId || "", r: a.rol || "", tabla: col, registro: id });
 }
 
-/** Nombres de clientes y personal para los textos (se cargan una vez por transacción). */
-async function nombres(t) {
-  if (!t._nombres) t._nombres = await cargarEstado(t.c, ["clientes", "mensajeros"]);
-  return t._nombres;
+/** Nombres de los clientes y del personal activo que aparecen en estos documentos: se buscan solo esos ids, no las tablas enteras
+    (antes cada cambio de una guía cargaba todos los clientes). Lo ya buscado en la transacción se conserva. */
+async function nombres(t, ...docs) {
+  const N = t._nombres ||= { clientes: {}, mensajeros: {}, buscados: new Set() };
+  const ids = campos => [...new Set(docs.flatMap(d => campos.map(c => d?.[c])).filter(x => x && typeof x === "string"))];
+  const traer = async (tabla, lista, donde) => {
+    const faltan = lista.filter(id => !N.buscados.has(tabla + "|" + id));
+    if (!faltan.length) return;
+    const r = await t.c.query(`SELECT id, nombre FROM ${tabla} WHERE id = ANY($1)${donde}`, [faltan]);
+    for (const f of r.rows) N[tabla][f.id] = { id: f.id, nombre: f.nombre };
+    for (const id of faltan) N.buscados.add(tabla + "|" + id);
+  };
+  await traer("clientes", ids(["clienteId"]), "");
+  await traer("mensajeros", ids(["mensajeroId", "personaId"]), " AND activo");
+  return N;
 }
 
 function resumenDoc(N, col, id, d) {
@@ -51,7 +62,7 @@ function fmtCampo(N, k, v) {
 /** op: crear | editar | borrar. Igual que logCambio() de la app. */
 export async function logCambio(t, op, col, id, data, antes) {
   if (NO_LOG.includes(col)) return;
-  const N = await nombres(t), nom = COL_NOM[col] || col, ref = { col, id };
+  const N = await nombres(t, data, antes), nom = COL_NOM[col] || col, ref = { col, id };
   const anotar = texto => registrar(t, texto, ref);
   if (op === "borrar") return anotar("Eliminó " + nom + ": " + resumenDoc(N, col, id, antes));
   if (op === "crear") return anotar("Creó " + nom + ": " + resumenDoc(N, col, id, data));

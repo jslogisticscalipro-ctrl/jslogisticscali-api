@@ -104,7 +104,8 @@ export async function subirArchivo(req, res) {
     await borrarArchivos([ruta]).catch(x => console.error(x.message)); // que no quede un archivo sin registro
     throw e;
   }
-  const urls = await firmarUrls([ruta]).catch(() => ({}));
+  // `?sinUrl=1`: quien sube no necesita la URL (la app interna no la usa); se ahorra un viaje a Storage.
+  const urls = req.query.sinUrl === "1" ? {} : await firmarUrls([ruta]).catch(() => ({}));
   res.status(201).json({ archivo: { tipo, url: urls[ruta] ?? null, creado: archivo.creado } });
 }
 

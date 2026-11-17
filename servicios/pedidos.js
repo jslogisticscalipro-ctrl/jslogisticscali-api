@@ -3,18 +3,19 @@
    Diferencias con la app (a propósito):
    - La hora de la entrega es la del servidor, no la del celular (backend/CLAUDE.md: nada contable con la hora del cliente).
    - Las fotos y la firma se suben aparte (POST /pedidos/:guia/archivos/:tipo) antes de confirmar la entrega. */
-import { Pedidos, Clientes, Mensajeros, cargarEstado } from "../models/documentos.js";
+import { Pedidos, Clientes, Mensajeros, Meta, cargarEstado } from "../models/documentos.js";
 import * as Pedido from "../models/pedido.model.js";
 import { METODOS, MOTIVOS, CUENTAS_JS, MEDIOS, VENTANA_CORRECCION_MS } from "../helpers/constantes.js";
 import { nuevoId } from "../helpers/ids.js";
 import { ahora } from "../helpers/reloj.js";
 import { pesos } from "../helpers/texto.js";
-import { cerrado } from "../helpers/calculos.js";
+import { cerrado, lineasCajaPedido } from "../helpers/calculos.js";
+import { hora } from "../helpers/fechas.js";
 import { storageConfigurado } from "../helpers/storage.js";
 import { datosInvalidos, noEncontrado, permisoNegado, conflicto, yaContadoError } from "./errores.js";
 import { enTransaccion, actualizar, borrar } from "./transaccion.js";
 import { registrar } from "./historial.js";
-import { calculosDe, exigirAdmin, exigirOficina, exigirEquipo, esMio, numero, texto } from "./contexto.js";
+import { exigirAdmin, exigirOficina, exigirEquipo, esMio, numero, texto } from "./contexto.js";
 
 const NO_EXISTE = "La guía no existe";
 
@@ -26,10 +27,14 @@ async function pedidoBloqueado(t, guia, puede = () => true) {
 }
 const delEquipo = a => p => a.esOficina || esMio(a, p.mensajeroId);
 
-/** Lo ya contado en un arqueo no se cambia: ni las transferencias a JS ni los pagos de domicilio de antes del arqueo. */
+/** Lo ya contado en un arqueo no se cambia: ni las transferencias a JS ni los pagos de domicilio de antes del arqueo.
+    Mismo resultado que `calc.cambiaLoContado`, sin cargar todos los movimientos de caja: si las líneas de caja del pedido no
+    cambian no hace falta saber la fecha del arqueo, y si cambian basta con una consulta del último corte. */
 async function exigirQueNoCambieLoContado(t, antes, despues) {
-  const calc = await calculosDe(t.c, ["cajamovs"]);
-  if (calc.cambiaLoContado(antes, despues)) throw yaContadoError(calc.textoContado());
+  const k = (p, corte) => (p ? lineasCajaPedido(p).filter(l => l[0] <= corte).map(l => l.join("|")).sort().join(";") : "");
+  if (k(antes, Infinity) === k(despues, Infinity)) return;
+  const corte = await Meta.corteCompleto(t.c);
+  if (corte && k(antes, corte) !== k(despues, corte)) throw yaContadoError(`Eso ya quedó contado en el arqueo del ${hora(corte)}. Para corregirlo, registra un movimiento nuevo.`);
 }
 
 /** Si el bucket está configurado, la entrega necesita la foto y la firma ya subidas (en la app: "Falta la firma"). */

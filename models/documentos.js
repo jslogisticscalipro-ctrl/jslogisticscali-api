@@ -328,6 +328,12 @@ export const Meta = {
     const r = await c.query(`SELECT valor->>'corte' AS corte FROM ajustes WHERE clave = 'caja'`);
     return aFecha(r.rows[0]?.corte)?.getTime() || 0;
   },
+  /** Lo mismo que `corteCaja()` de los cálculos (el mayor entre el corte guardado y el último arqueo o saldo inicial), con una sola consulta. */
+  async corteCompleto(c) {
+    const r = await c.query(`SELECT (SELECT valor->>'corte' FROM ajustes WHERE clave = 'caja') AS corte,
+      (SELECT max(fecha) FROM cajamovs WHERE cat IN ('arqueo', 'inicial')) AS ultimo`);
+    return Math.max(aFecha(r.rows[0]?.corte)?.getTime() || 0, aFecha(r.rows[0]?.ultimo)?.getTime() || 0);
+  },
   async guardarCorte(c, ms) {
     await c.query(`INSERT INTO ajustes (clave, valor) VALUES ('caja', $1::jsonb)
       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor, actualizado = now()`, [JSON.stringify({ corte: ms ? new Date(ms).toISOString() : null })]);
