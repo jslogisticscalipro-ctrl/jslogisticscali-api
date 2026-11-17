@@ -58,13 +58,6 @@ after(() => pool.end());
 const subir = (s, g, tipo, cuerpo, mime = "image/jpeg") =>
   s.post(`/api/pedidos/${g}/archivos/${tipo}`).set("Content-Type", mime).send(cuerpo);
 
-test("con ?sinUrl=1 la subida no firma la URL (la app interna no la usa)", async () => {
-  const r = await mensajero.post(`/api/pedidos/${guia}/archivos/salida?sinUrl=1`).set("Content-Type", "image/jpeg").send(JPEG);
-  assert.equal(r.status, 201);
-  assert.equal(r.body.archivo.tipo, "salida");
-  assert.equal(r.body.archivo.url, null);
-});
-
 test("el mensajero sube la foto de salida y la miniatura de su guía", async () => {
   const r = await subir(mensajero, guia, "salida", JPEG);
   assert.equal(r.status, 201);
@@ -135,4 +128,11 @@ test("si la guía no existe no sube nada al bucket", async () => {
   const antes = bucket.size;
   assert.equal((await subir(admin, "JS-99999", "entrega", JPEG)).status, 404);
   assert.equal(bucket.size, antes);
+});
+
+test("con ?sinUrl=1 la subida no firma la URL (la app interna no la usa)", async () => {
+  const r = await admin.post(`/api/pedidos/${guia}/archivos/salida?sinUrl=1`).set("Content-Type", "image/jpeg").send(JPEG);
+  assert.equal(r.status, 201);
+  assert.equal(r.body.archivo.tipo, "salida");
+  assert.equal(r.body.archivo.url, null);
 });
