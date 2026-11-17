@@ -348,9 +348,9 @@ Lo ya contado en un arqueo no se cambia: responde `409 YA_CONTADO` con el texto 
 | `DELETE /caja/movimientos/:id` | admin | Quita (un adelanto de liquidación devuelve la deuda; una devolución resta de `devuelto`) |
 | `POST /caja/bases` | oficina | `{ mensajeroId, valor, concepto }`: base para vueltos desde la caja de oficina |
 | `GET /caja/oficinas?dia=`, `GET /caja/oficinas/:uid?dia=` | admin; el asistente, la suya | Cajas de oficina |
-| `POST /caja/oficinas/:uid/base`, `POST /caja/oficinas/:uid/cierre` | admin | Base para un asistente y cierre (`{ efectivo, nequi, bancolombia, nota }`, con sobrante y ajuste) |
+| `POST /caja/oficinas/:uid/base`, `POST /caja/oficinas/:uid/cierre` | admin | Base para un asistente y cierre (`{ efectivo, nequi, bancolombia, nota }`, con sobrante y ajuste). El cierre responde `{ entregado, sobrante, ajustes, movimientos }` con los documentos de caja que guardó |
 | `GET /caja/arqueo/esperado`, `GET /caja/arqueos` | admin | Lo esperado por medio y los arqueos hechos |
-| `POST /caja/arqueos` | admin | `{ contado: { efectivo, nequi, bancolombia }, nota }`. Lo esperado lo calcula el servidor (si llega, se ignora) |
+| `POST /caja/arqueos` | admin | `{ contado: { efectivo, nequi, bancolombia }, nota }`. Lo esperado lo calcula el servidor (si llega, se ignora). → `{ arqueo: { id, fecha, dif, esperado, contado, resultado, movimientos } }`; `movimientos` son los documentos de caja que guardó (el conteo y sus diferencias) |
 | `DELETE /caja/arqueos/:id` | admin | Deshace el último arqueo |
 | `POST /caja/adelantos/:id/devolucion`, `DELETE /caja/adelantos/:id` | admin | Devolución (todo o parte) y quitar un adelanto |
 | `GET /cuentas`, `POST /cuentas`, `POST /cuentas/iniciales`, `POST /cuentas/:id/movimientos` | oficina (crear: admin) | Cuentas internas con su saldo. Los gastos de caja (`cat: "gasto"`) salen de la cuenta de tipo `base` (Base de JS): `POST /caja/movimientos` les guarda `cuentaId` y aparecen en sus movimientos (siguen siendo gasto en la caja). Los gastos viejos sin `cuentaId` no cuentan |

@@ -210,10 +210,11 @@ export async function cierreOficina(ctx, auid, datos) {
     const sobs = excesos.filter(([m]) => m === "efectivo"), nivs = excesos.filter(([m]) => m !== "efectivo"), vals = entregas.filter(([, v]) => v > 0);
     if (!vals.length && !sobs.length && !nivs.length) throw datosInvalidos("Escribe un valor mayor a cero");
     const nota = texto(datos.nota, 200), t0 = ahora(), quien = u.nombre || u.email || "";
-    for (const [medio, val] of sobs) await guardar(t, "cajamovs", { id: nuevoId(), tipo: "entra", cat: "sobrante", personaUid: auid, personaId: "", valor: val, medio, concepto: quien + (nota ? " · " + nota : ""), fecha: t0 });
-    for (const [medio, val] of nivs) await guardar(t, "cajamovs", { id: nuevoId(), tipo: "base", cat: "oficina", nivel: true, personaUid: auid, personaId: "", valor: val, medio, concepto: "Pagó desde la cuenta de la empresa más de lo que registró que entró", fecha: t0 });
-    for (const [medio, val] of vals) await guardar(t, "cajamovs", { id: nuevoId(), tipo: "entrega", cat: "oficina", personaUid: auid, personaId: "", valor: val, medio, concepto: nota, fecha: t0 + 1 });
-    return { entregado: Object.fromEntries(vals), sobrante: Object.fromEntries(sobs), ajustes: Object.fromEntries(nivs) };
+    const creados = []; // los documentos guardados se devuelven para que la app los ponga en pantalla sin volver a bajar todo
+    for (const [medio, val] of sobs) creados.push(await guardar(t, "cajamovs", { id: nuevoId(), tipo: "entra", cat: "sobrante", personaUid: auid, personaId: "", valor: val, medio, concepto: quien + (nota ? " · " + nota : ""), fecha: t0 }));
+    for (const [medio, val] of nivs) creados.push(await guardar(t, "cajamovs", { id: nuevoId(), tipo: "base", cat: "oficina", nivel: true, personaUid: auid, personaId: "", valor: val, medio, concepto: "Pagó desde la cuenta de la empresa más de lo que registró que entró", fecha: t0 }));
+    for (const [medio, val] of vals) creados.push(await guardar(t, "cajamovs", { id: nuevoId(), tipo: "entrega", cat: "oficina", personaUid: auid, personaId: "", valor: val, medio, concepto: nota, fecha: t0 + 1 }));
+    return { entregado: Object.fromEntries(vals), sobrante: Object.fromEntries(sobs), ajustes: Object.fromEntries(nivs), movimientos: creados };
   });
 }
 
@@ -241,18 +242,18 @@ export async function hacerArqueo(ctx, datos) {
     await t.c.query("select pg_advisory_xact_lock(4242)"); // un arqueo a la vez
     const calc = await calculosDe(t.c);
     const { e, of } = calc.esperadoArqueo();
-    const aid = nuevoId(), t0 = ahora(), nota = texto(datos.nota, 300), dif = {};
+    const aid = nuevoId(), t0 = ahora(), nota = texto(datos.nota, 300), dif = {}, movs = [];
     for (const k of Object.keys(MEDIOS)) {
       const d = contado[k] - e[k];
       if (!d) continue;
       dif[k] = d;
-      await guardar(t, "cajamovs", { id: nuevoId(), cat: "arqueo", tipo: d > 0 ? "entra" : "sale", valor: Math.abs(d), medio: k, arqueoId: aid, personaId: "", concepto: nota, fecha: t0, porNombre: a.nombre });
+      movs.push(await guardar(t, "cajamovs", { id: nuevoId(), cat: "arqueo", tipo: d > 0 ? "entra" : "sale", valor: Math.abs(d), medio: k, arqueoId: aid, personaId: "", concepto: nota, fecha: t0, porNombre: a.nombre }));
     }
     await Meta.guardarCorte(t.c, t0);
     t.cambios.add("meta");
-    await guardar(t, "cajamovs", { id: aid, cat: "arqueo", tipo: "marca", valor: 0, medio: "", arqueoId: aid, personaId: "", esperado: e, contado, oficina: of, concepto: nota, fecha: t0, porNombre: a.nombre });
+    movs.push(await guardar(t, "cajamovs", { id: aid, cat: "arqueo", tipo: "marca", valor: 0, medio: "", arqueoId: aid, personaId: "", esperado: e, contado, oficina: of, concepto: nota, fecha: t0, porNombre: a.nombre }));
     const arqueo = { id: aid, fecha: t0, dif, esperado: e, contado };
-    return { ...arqueo, resultado: resultadoArqueo(arqueo) };
+    return { ...arqueo, resultado: resultadoArqueo(arqueo), movimientos: movs }; // `movimientos`: lo que se guardó, para pintarlo sin recargar todo
   });
 }
 /** Deshacer el último arqueo: se quitan el conteo y sus diferencias, y la caja queda abierta hasta el arqueo anterior. */
