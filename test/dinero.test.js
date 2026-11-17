@@ -64,7 +64,7 @@ test("recaudos y liquidación: lo que entrega el mensajero baja lo que debe; liq
   assert.ok(d0 > 0, "Carlos debe lo que cobró");
   const r = await asistente.post("/api/recaudos").send({ mensajeroId: m1.id, valor: 20000, medio: "efectivo" });
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  assert.equal(r.body.debe, d0 - 20000);
+  assert.equal(r.body.debe, undefined); // el mensajero no recibe `debe`: se consulta en /mensajeros/:id/periodo
   assert.equal(await debe(), d0 - 20000);
   assert.equal((await mensajero.post("/api/recaudos").send({ mensajeroId: m1.id, valor: 1, medio: "efectivo" })).status, 403);
   assert.equal((await asistente.post("/api/recaudos").send({ mensajeroId: m1.id, valor: -5, medio: "efectivo" })).status, 400);

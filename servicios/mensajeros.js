@@ -116,8 +116,9 @@ export async function recibir(ctx, { mensajeroId, valor, medio, nota }) {
     // Un patinador no tiene período de pedidos: lo que debe es lo que anotó de los clientes menos lo que ya entregó.
     const pat = await CajaPatinador.resumenDe(mensajeroId, t.c);
     if (pat) return { recaudo, debe: pat.debe };
-    const calc = await calculosDe(t.c, COLS_PERIODO);
-    return { recaudo, debe: calc.periodoMensajero(mensajeroId).debe };
+    // Para un mensajero NO se calcula `debe` aquí: eso cargaba todos los pedidos, recaudos y movimientos solo para
+    // devolver un número que la app no usa (lo calcula con GET /mensajeros/:id/periodo). Hacía lenta la respuesta.
+    return { recaudo };
   });
 }
 
