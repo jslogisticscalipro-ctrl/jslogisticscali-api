@@ -7,12 +7,20 @@ import { PAPELERA_COLS } from "../helpers/constantes.js";
 import { nuevoId } from "../helpers/ids.js";
 import { logCambio } from "./historial.js";
 
-/** Ejecuta fn(t) en una transacción. t = { c, actor, ctx, cambios }. */
+/** Ejecuta fn(t) en una transacción. t = { c, actor, ctx, cambios, quitados }.
+    quitados: guías que alguna pantalla debe sacar de su lista ya (borradas, o pasadas a otro mensajero). Van en el aviso
+    para que el panel del mensajero no espere la recarga completa de pedidos, que tiene una pausa mínima de 45 s. */
 export async function enTransaccion(ctx, fn) {
-  const cambios = new Set();
-  const r = await ctx.db.transaccion(c => fn({ c, actor: ctx.actor, ctx, cambios }));
-  if (cambios.size) ctx.eventos?.emitir([...cambios]);
+  const cambios = new Set(), quitados = [];
+  const r = await ctx.db.transaccion(c => fn({ c, actor: ctx.actor, ctx, cambios, quitados }));
+  if (cambios.size) ctx.eventos?.emitir([...cambios], quitados.length ? { pedidosQuitados: quitados } : undefined);
   return r;
+}
+
+/** Anota una guía que sale de la lista de alguien. todos: true si sale de todas (borrada); false si solo la pierde su mensajero anterior. */
+function quitar(t, p, todos) {
+  if (!p || !t.quitados) return;
+  t.quitados.push({ guia: p.guia, mensajeroId: p.mensajeroId || "", clienteId: p.clienteId || "", todos });
 }
 
 const modelo = col => { const m = MODELOS[col]; if (!m) throw new Error("Colección desconocida: " + col); return m; };
@@ -32,6 +40,7 @@ export async function actualizar(t, col, id, cambios, { log = true, antes } = {}
   const d = await m.actualizar(t.c, id, cambios);
   if (!d) return null;
   t.cambios.add(col);
+  if (col === "pedidos" && antes?.mensajeroId && cambios.mensajeroId !== undefined && cambios.mensajeroId !== antes.mensajeroId) quitar(t, antes, false);
   if (log) await logCambio(t, "editar", col, id, cambios, antes);
   return d;
 }
@@ -41,6 +50,7 @@ export async function borrar(t, col, id, { grupo, sinPapelera = false, log = tru
   const antes = await m.borrar(t.c, id);
   if (!antes) return null;
   t.cambios.add(col);
+  if (col === "pedidos") quitar(t, antes, true);
   if (!sinPapelera && PAPELERA_COLS.includes(col)) {
     await Papelera.guardar(t.c, { col, docId: id, data: antes, uid: t.actor?.uid || "", grupo: grupo || nuevoId() });
     t.cambios.add("papelera");

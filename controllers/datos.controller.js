@@ -23,5 +23,5 @@ export const sincronizar = responder(ctx => D.sincronizar(ctx));
 /** Server-Sent Events: avisa qué colecciones cambiaron para que la pantalla vuelva a pedirlas. */
 export function escuchar(req, res) {
   const actor = ctxDe(req).actor;
-  eventos.conectar(req, res, D.visiblesDe(actor), { clienteId: actor?.clienteId || "", esOficina: !!actor?.esOficina });
+  eventos.conectar(req, res, D.visiblesDe(actor), { clienteId: actor?.clienteId || "", mensajeroId: actor?.mensajeroId || "", esOficina: !!actor?.esOficina });
 }

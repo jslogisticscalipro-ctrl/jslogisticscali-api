@@ -163,3 +163,22 @@ test("archivos y miniatura: sin Storage configurado salen vacíos, y la ruta int
   assert.equal(subir.status, 503);
   assert.equal(subir.body.error.code, "FOTOS_NO_CONFIGURADAS");
 });
+
+test("borrar o pasar una guía a otro mensajero avisa cuál guía sale de la lista", async () => {
+  const { eventos } = await import("../servicios/eventos.js");
+  const avisos = [];
+  const original = eventos.emitir;
+  eventos.emitir = (cols, meta) => { avisos.push({ cols, meta }); return original.call(eventos, cols, meta); };
+  try {
+    const { guia } = (await mensajero.post("/api/pedidos").send({})).body.pedido;
+    avisos.length = 0;
+    assert.equal((await admin.patch(`/api/pedidos/${guia}`).send({ mensajeroId: m2.id })).status, 200);
+    assert.deepEqual(avisos.at(-1).meta?.pedidosQuitados, [{ guia, mensajeroId: m1.id, clienteId: "", todos: false }],
+      "el mensajero anterior debe saber que la guía ya no es suya");
+    avisos.length = 0;
+    assert.equal((await admin.delete(`/api/pedidos/${guia}`)).status, 204);
+    assert.ok(avisos.at(-1).cols.includes("pedidos"));
+    assert.deepEqual(avisos.at(-1).meta?.pedidosQuitados, [{ guia, mensajeroId: m2.id, clienteId: "", todos: true }],
+      "la guía borrada debe salir de inmediato del panel del mensajero");
+  } finally { eventos.emitir = original; }
+});
