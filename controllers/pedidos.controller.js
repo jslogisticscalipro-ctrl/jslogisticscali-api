@@ -13,14 +13,15 @@ import { VENTANA_CORRECCION_MS } from "../helpers/negocio.js";
 import * as Servicio from "../servicios/pedidos.js";
 import { ctxDe, responder } from "./accion.js";
 import { esOficina } from "../middleware/autorizar.js";
-import { firmarUrls, subirArchivo as subirAlBucket, borrarArchivos, storageConfigurado } from "../helpers/storage.js";
+import { firmarUrls, firmarUrlsReusables, subirArchivo as subirAlBucket, borrarArchivos, storageConfigurado } from "../helpers/storage.js";
 import { tipoDeImagen } from "../helpers/imagenes.js";
 import { HttpError } from "../helpers/errores.js";
 import { nuevoId } from "../helpers/ids.js";
 
-/** Cambia la ruta interna de la miniatura por una URL firmada (`mini`), sin exponer la ruta del bucket. */
+/** Cambia la ruta interna de la miniatura por una URL firmada (`mini`), sin exponer la ruta del bucket.
+    La URL se repite entre respuestas (`firmarUrlsReusables`): así el navegador no vuelve a bajar la misma miniatura. */
 async function conMini(pedidos) {
-  const urls = await firmarUrls(pedidos.map(p => p.miniRuta).filter(Boolean)).catch(e => { console.error(e.message); return {}; });
+  const urls = await firmarUrlsReusables(pedidos.map(p => p.miniRuta).filter(Boolean)).catch(e => { console.error(e.message); return {}; });
   return pedidos.map(({ miniRuta, ...p }) => ({ ...p, mini: (miniRuta && urls[miniRuta]) || null }));
 }
 
@@ -64,13 +65,13 @@ export async function obtener(req, res) {
   res.json({ pedido: (await conMini([p]))[0] });
 }
 
-/** Fotos y firmas del pedido con URL firmadas que vencen en 1 hora. */
+/** Fotos y firmas del pedido con URL firmadas a las que les queda al menos 1 hora (se repiten entre respuestas). */
 export async function archivos(req, res) {
   const { guia } = req.valido.params;
   const p = await Pedido.buscarPorGuia(guia);
   if (!p || !puedeVer(req.usuario, p)) throw noEncontrado("La guía no existe");
   const lista = await Pedido.listarArchivos(guia, { incluirPrevias: esOficina(req.usuario) });
-  const urls = await firmarUrls(lista.map(a => a.ruta));
+  const urls = await firmarUrlsReusables(lista.map(a => a.ruta));
   res.json({ archivos: lista.filter(a => urls[a.ruta]).map(a => ({ tipo: a.tipo, url: urls[a.ruta], creado: a.creado })), borradas: !!p.fotosBorradas });
 }
 
