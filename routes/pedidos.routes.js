@@ -17,6 +17,8 @@ r.get("/:guia", permitir(EQUIPO, "cliente"), validar(guia), C.obtener);
 r.get("/:guia/archivos", permitir(EQUIPO, "cliente"), validar(guia), C.archivos);
 r.post("/:guia/archivos/:tipo", permitir(EQUIPO), validar({ params: V.paramArchivo }), imagen, C.subirArchivo);
 r.post("/", permitir(EQUIPO), validar({ body: V.crear }), C.crear);
+// Guía y foto de salida juntas: sin foto no hay guía.
+r.post("/con-foto", permitir(EQUIPO), validar({ query: V.crearConFoto }), imagen, C.crearConFoto);
 r.post("/en-bloque", permitir(OFICINA), validar({ body: V.enBloque }), C.enBloque);
 r.patch("/:guia", permitir(OFICINA), validar({ ...guia, body: V.actualizar }), C.actualizar);
 r.post("/:guia/recogida", permitir(EQUIPO), validar(guia), C.recoger);

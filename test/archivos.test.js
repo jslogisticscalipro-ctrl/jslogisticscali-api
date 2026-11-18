@@ -7,6 +7,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 
 const bucket = new Map();
+let fallarSubida = false; // simula que Supabase rechaza la subida
 const fetchReal = globalThis.fetch;
 globalThis.fetch = async (url, op = {}) => {
   const u = new URL(url);
@@ -26,6 +27,7 @@ globalThis.fetch = async (url, op = {}) => {
   }
   if (u.pathname.startsWith(base + "/") && op.method === "POST") {
     const ruta = u.pathname.slice(base.length + 1);
+    if (fallarSubida) return json({ error: "falla simulada" }, 503);
     if (bucket.has(ruta)) return json({ error: "Duplicate" }, 409);
     bucket.set(ruta, { tipo: op.headers["Content-Type"], bytes: op.body.length });
     return json({ Key: "pedidos/" + ruta });
@@ -157,4 +159,61 @@ test("POST /pedidos/miniaturas: valida la entrada y exige sesión", async () => 
   assert.equal((await mensajero.post("/api/pedidos/miniaturas").send({ guias: ["no-es-guia"] })).status, 400);
   assert.equal((await mensajero.post("/api/pedidos/miniaturas").send({ guias: Array(101).fill(guia) })).status, 400);
   assert.equal((await mensajero.post("/api/pedidos/miniaturas").send({ guias: [guia], otro: 1 })).status, 400);
+});
+
+/* ---- Guía y foto en un solo paso (POST /pedidos/con-foto): sin foto no hay guía ---- */
+const conFoto = (s, cuerpo = JPEG, mime = "image/jpeg", q = "") => s.post("/api/pedidos/con-foto" + q).set("Content-Type", mime).send(cuerpo);
+const contador = async () => (await pool.query(`SELECT n FROM contadores WHERE nombre = 'guia'`)).rows[0].n;
+
+test("con-foto: el mensajero crea la guía con su foto de salida, a su nombre y en cero", async () => {
+  const r = await conFoto(mensajero);
+  assert.equal(r.status, 201);
+  const p = r.body.pedido;
+  assert.equal(p.estado, "pendiente");
+  assert.equal(p.valorServicio, 0);
+  assert.equal(p.sinFoto, false);
+  const a = await mensajero.get(`/api/pedidos/${p.guia}/archivos`);
+  assert.deepEqual(a.body.archivos.map(x => x.tipo), ["salida"]);
+  assert.ok([...bucket.keys()].some(k => k.startsWith(p.guia + "/salida-")));
+});
+
+test("con-foto: si la foto no sube, la guía no se crea y el consecutivo no avanza", async () => {
+  const antes = await contador(), guiasAntes = (await pool.query("SELECT count(*)::int AS n FROM pedidos")).rows[0].n;
+  fallarSubida = true;
+  try { assert.equal((await conFoto(mensajero)).status, 500); } finally { fallarSubida = false; }
+  assert.equal(await contador(), antes, "no queda hueco en la numeración");
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM pedidos")).rows[0].n, guiasAntes);
+  const siguiente = (await conFoto(mensajero)).body.pedido;
+  assert.equal(siguiente.n, antes + 1);
+});
+
+test("con-foto: rechaza lo que no es imagen sin crear guía", async () => {
+  const antes = await contador();
+  assert.equal((await conFoto(mensajero, Buffer.from("hola, no soy una foto"), "image/jpeg")).status, 415);
+  assert.equal(await contador(), antes);
+});
+
+test("con-foto: la oficina elige el mensajero; sin él, o con uno que no existe, no crea nada", async () => {
+  const antes = await contador();
+  assert.equal((await conFoto(admin)).status, 400);
+  assert.equal((await conFoto(admin, JPEG, "image/jpeg", "?mensajeroId=no-existe")).status, 400);
+  assert.equal(await contador(), antes);
+  const mid = (await pool.query("SELECT mensajero_id FROM usuarios WHERE email = 'carlos@js.co'")).rows[0].mensajero_id;
+  const r = await conFoto(admin, JPEG, "image/jpeg", "?mensajeroId=" + mid);
+  assert.equal(r.status, 201);
+  assert.equal(r.body.pedido.mensajeroId, mid);
+});
+
+test("sinFoto: la oficina ve las guías por entregar que se quedaron sin foto de salida", async () => {
+  const vieja = (await mensajero.post("/api/pedidos").send({})).body.pedido.guia;   // como la app vieja: guía primero, foto después
+  const reciente = (await mensajero.post("/api/pedidos").send({})).body.pedido.guia;
+  const conLaFoto = (await conFoto(mensajero)).body.pedido.guia;
+  await pool.query(`UPDATE pedidos SET creado = now() - interval '11 minutes' WHERE guia = ANY($1)`, [[vieja, conLaFoto]]);
+  const r = await admin.get("/api/pedidos?sinFoto=true&pagina=1&porPagina=100");
+  assert.equal(r.status, 200);
+  const guias = r.body.pedidos.map(p => p.guia);
+  assert.ok(guias.includes(vieja), "la que lleva más de 10 minutos sin foto aparece");
+  assert.ok(!guias.includes(reciente), "la recién creada puede estar subiendo todavía");
+  assert.ok(!guias.includes(conLaFoto), "la que tiene foto no aparece");
+  assert.ok(r.body.pedidos.every(p => p.sinFoto === true));
 });

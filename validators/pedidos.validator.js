@@ -26,6 +26,7 @@ export const listar = z.object({
   conDiferencia: bandera.optional(),                                    // diferencia de cobro sin revisar
   diferencia: z.enum(["todas", "sinRevisar"]).optional(),               // "todas" incluye las ya revisadas
   sinRemitente: bandera.optional(),
+  sinFoto: bandera.optional(),                                          // por entregar y sin foto de salida (ver SQL_SIN_FOTO)
   cambioPendiente: bandera.optional(),                                  // prenda de cambio que el cliente no ha recibido
   sinServicio: bandera.optional(),                                      // entregado, con remitente y sin valor de servicio
   dia: z.string().refine(esDia, "Usa un día con el formato AAAA-MM-DD").optional(), // salió o se cerró ese día (hora de Colombia)
@@ -47,6 +48,9 @@ export const crear = z.object({
   valorServicio: pesos.default(0),
   aCobrar: pesos.default(0)
 });
+
+// Crear la guía con su foto en un solo paso: la foto va como cuerpo binario y, para la oficina, el mensajero en la query.
+export const crearConFoto = z.object({ mensajeroId: id.optional() });
 
 const conCuenta = (d, ctx) => {
   if (d.metodo === "transf_js" && !d.cuentaJs)

@@ -123,22 +123,57 @@ export async function subirArchivo(req, res) {
   res.status(201).json({ archivo: { tipo, url: urls[ruta] ?? null, creado: archivo.creado } });
 }
 
-export async function crear(req, res) {
-  const u = req.usuario, b = req.valido.body;
-  let datos;
+/** Datos de una guía nueva según quién la crea: el mensajero, a su nombre y en cero; la oficina, para el mensajero que elija. */
+async function datosDeGuiaNueva(u, b) {
   if (u.rol === "mensajero") {
     if (!u.mensajeroId) throw prohibido("Tu cuenta no está vinculada con tu nombre en Personal");
-    datos = { mensajeroId: u.mensajeroId, clienteId: null, valorServicio: 0, aCobrar: 0 }; // los valores los pone la oficina
-  } else {
-    if (!b.mensajeroId) throw invalido("Elige el mensajero", [{ campo: "mensajeroId", mensaje: "Obligatorio" }]);
-    if (!(await Mensajero.buscarPorId(b.mensajeroId))) throw invalido("El mensajero no existe");
-    if (b.clienteId && !(await Cliente.buscarPorId(b.clienteId))) throw invalido("El cliente no existe");
-    datos = { mensajeroId: b.mensajeroId, clienteId: b.clienteId ?? null, valorServicio: b.valorServicio, aCobrar: b.aCobrar };
+    return { mensajeroId: u.mensajeroId, clienteId: null, valorServicio: 0, aCobrar: 0 }; // los valores los pone la oficina
   }
+  if (!b.mensajeroId) throw invalido("Elige el mensajero", [{ campo: "mensajeroId", mensaje: "Obligatorio" }]);
+  if (!(await Mensajero.buscarPorId(b.mensajeroId))) throw invalido("El mensajero no existe");
+  if (b.clienteId && !(await Cliente.buscarPorId(b.clienteId))) throw invalido("El cliente no existe");
+  return { mensajeroId: b.mensajeroId, clienteId: b.clienteId ?? null, valorServicio: b.valorServicio ?? 0, aCobrar: b.aCobrar ?? 0 };
+}
+
+export async function crear(req, res) {
+  const u = req.usuario;
+  const datos = await datosDeGuiaNueva(u, req.valido.body);
   const p = await Pedido.crear({ ...datos, creadoPor: u.id });
   await Auditoria.registrar({ uid: u.id, accion: `Creó la guía ${p.guia}`, tabla: "pedidos", registro: p.guia });
   // Esta ruta no pasa por enTransaccion (que avisa sola): sin este aviso, la lista de Pedidos de la oficina no se
   // enteraba de la guía nueva del mensajero hasta la recarga periódica (5 min con el canal en tiempo real conectado).
+  eventos.emitir(["pedidos"]);
+  res.status(201).json({ pedido: p });
+}
+
+/** Crea la guía y su foto de salida en un solo paso (cuerpo binario JPEG, PNG o WebP): si la foto no se puede guardar,
+    la guía no existe. Así no quedan guías sin foto que la oficina tenga que borrar, y el consecutivo no deja huecos
+    (el contador se deshace con la transacción). La foto se sube a Storage con la transacción abierta: el contador queda
+    bloqueado ese rato, pero la foto ya llegó entera al servidor y subirla a Supabase toma menos de un segundo.
+    La miniatura la sube el navegador después, con POST /pedidos/:guia/archivos/mini. */
+export async function crearConFoto(req, res) {
+  const u = req.usuario;
+  if (!storageConfigurado())
+    throw new HttpError(503, "FOTOS_NO_CONFIGURADAS", "Las fotos todavía no están configuradas en el servidor. Avísale a administración.");
+  const img = tipoDeImagen(req.body);
+  if (!img) throw new HttpError(415, "NO_ES_IMAGEN", "El archivo no es una foto válida. Usa una foto JPG, PNG o WebP.");
+  const datos = await datosDeGuiaNueva(u, req.valido.query);
+  let ruta = null;
+  let p;
+  try {
+    p = await transaccion(async db => {
+      const nuevo = await Pedido.crear({ ...datos, creadoPor: u.id }, db);
+      ruta = `${nuevo.guia}/salida-${Date.now()}-${nuevoId(8)}.${img.ext}`;
+      await subirAlBucket(ruta, req.body, img.mime);
+      await Pedido.agregarArchivo({ guia: nuevo.guia, tipo: "salida", ruta, por: u.id, bytes: req.body.length }, db);
+      await Auditoria.registrar({ uid: u.id, accion: `Creó la guía ${nuevo.guia} con su foto`, tabla: "pedidos", registro: nuevo.guia }, db);
+      return Pedido.buscarPorGuia(nuevo.guia, db);
+    });
+  } catch (e) {
+    // Si la foto alcanzó a subir pero la base falló, se borra: la guía no existe y la foto no debe quedar suelta.
+    if (ruta) await borrarArchivos([ruta]).catch(x => console.error(x.message));
+    throw e;
+  }
   eventos.emitir(["pedidos"]);
   res.status(201).json({ pedido: p });
 }
