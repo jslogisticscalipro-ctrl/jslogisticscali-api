@@ -111,6 +111,15 @@ export async function buscarPorGuia(guia, db = { query }) {
   return filaAObjeto(rows[0]);
 }
 
+/** Ruta de la miniatura más reciente de varias guías, con quién las puede ver (para firmarlas solo a quien corresponde). */
+export async function rutasMini(guias) {
+  const { rows } = await query(
+    `SELECT p.guia, p.mensajero_id, p.cliente_id,
+       (SELECT a.ruta FROM pedido_archivos a WHERE a.guia = p.guia AND a.tipo = 'mini' ORDER BY a.creado DESC LIMIT 1) AS mini_ruta
+     FROM pedidos p WHERE p.guia = ANY($1::text[])`, [guias]);
+  return rows.map(filaAObjeto);
+}
+
 /** Bloquea la fila hasta el fin de la transacción, para validar y cambiar sin carreras. */
 export async function bloquear(guia, db) {
   const { rows } = await db.query(`SELECT * FROM pedidos WHERE guia = $1 FOR UPDATE`, [guia]);

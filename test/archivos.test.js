@@ -136,3 +136,25 @@ test("con ?sinUrl=1 la subida no firma la URL (la app interna no la usa)", async
   assert.equal(r.body.archivo.tipo, "salida");
   assert.equal(r.body.archivo.url, null);
 });
+
+test("POST /pedidos/miniaturas: firma solo las miniaturas de guías que la cuenta puede ver", async () => {
+  await subir(mensajero, guia, "mini", PNG, "image/png");
+  const suya = await mensajero.post("/api/pedidos/miniaturas").send({ guias: [guia, "JS-99999"] });
+  assert.equal(suya.status, 200);
+  assert.deepEqual(Object.keys(suya.body.minis), [guia], "la guía que no existe no aparece");
+  assert.match(suya.body.minis[guia], /\/mini-.+\.png\?token=t$/);
+
+  const ajena = await otroMensajero.post("/api/pedidos/miniaturas").send({ guias: [guia] });
+  assert.equal(ajena.status, 200);
+  assert.deepEqual(ajena.body.minis, {}, "otro mensajero no recibe nada (ni se confirma que existe)");
+
+  const oficina = await admin.post("/api/pedidos/miniaturas").send({ guias: [guia] });
+  assert.equal(oficina.body.minis[guia], suya.body.minis[guia], "la misma foto repite la misma URL");
+});
+
+test("POST /pedidos/miniaturas: valida la entrada y exige sesión", async () => {
+  assert.equal((await mensajero.post("/api/pedidos/miniaturas").send({ guias: [] })).status, 400);
+  assert.equal((await mensajero.post("/api/pedidos/miniaturas").send({ guias: ["no-es-guia"] })).status, 400);
+  assert.equal((await mensajero.post("/api/pedidos/miniaturas").send({ guias: Array(101).fill(guia) })).status, 400);
+  assert.equal((await mensajero.post("/api/pedidos/miniaturas").send({ guias: [guia], otro: 1 })).status, 400);
+});

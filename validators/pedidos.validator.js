@@ -111,6 +111,9 @@ export const enBloque = z.object({
   usarTarifaCliente: z.boolean().default(true)
 });
 
+/** Las guías de las que la pantalla quiere la miniatura (las que se ven en ese momento). */
+export const miniaturas = z.object({ guias: z.array(paramGuia.shape.guia).min(1).max(100) }).strict();
+
 export const paramArchivo = paramGuia.extend({ tipo: z.enum(TIPOS_ARCHIVO, { error: "Tipo de archivo inválido" }) });
 
 // Dónde quedó el paquete de un devuelto.

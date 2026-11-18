@@ -65,6 +65,16 @@ export async function obtener(req, res) {
   res.json({ pedido: (await conMini([p]))[0] });
 }
 
+/** Miniaturas de las guías que la pantalla está mostrando: `{ minis: { guia: url } }`. Solo de las que la cuenta puede ver
+    (las demás no aparecen, sin avisar si existen). Sirve para que la lista del mensajero no firme todas sus guías. */
+export async function miniaturas(req, res) {
+  const filas = (await Pedido.rutasMini([...new Set(req.valido.body.guias)])).filter(p => puedeVer(req.usuario, p) && p.miniRuta);
+  const urls = await firmarUrlsReusables(filas.map(p => p.miniRuta)).catch(e => { console.error(e.message); return {}; });
+  const minis = {};
+  for (const p of filas) if (urls[p.miniRuta]) minis[p.guia] = urls[p.miniRuta];
+  res.json({ minis });
+}
+
 /** Fotos y firmas del pedido con URL firmadas a las que les queda al menos 1 hora (se repiten entre respuestas). */
 export async function archivos(req, res) {
   const { guia } = req.valido.params;

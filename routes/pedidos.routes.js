@@ -12,6 +12,7 @@ const r = Router();
 const guia = { params: V.paramGuia };
 
 r.get("/", permitir(EQUIPO, "cliente"), validar({ query: V.listar }), C.listar); // cada rol ve lo suyo (el patinador no lee guías)
+r.post("/miniaturas", permitir(EQUIPO, "cliente"), validar({ body: V.miniaturas }), C.miniaturas); // POST, para no chocar con GET /:guia
 r.get("/:guia", permitir(EQUIPO, "cliente"), validar(guia), C.obtener);
 r.get("/:guia/archivos", permitir(EQUIPO, "cliente"), validar(guia), C.archivos);
 r.post("/:guia/archivos/:tipo", permitir(EQUIPO), validar({ params: V.paramArchivo }), imagen, C.subirArchivo);
