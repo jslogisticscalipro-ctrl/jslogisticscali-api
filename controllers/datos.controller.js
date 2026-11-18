@@ -1,5 +1,6 @@
 /* Historial de cambios, papelera, respaldo, sincronización completa y avisos en tiempo real. Reglas en servicios/datos.js. */
 import * as D from "../servicios/datos.js";
+import * as F from "../servicios/fotos.js";
 import { eventos } from "../servicios/eventos.js";
 import { responder, ctxDe } from "./accion.js";
 
@@ -13,6 +14,8 @@ export const vaciarPapelera = responder(ctx => D.eliminarDefinitivo(ctx));
 
 export const exportar = responder(ctx => D.exportar(ctx));
 export const espacio = responder(ctx => D.espacio(ctx));
+export const umbralFotos = responder((ctx, req) => F.cambiarUmbral(ctx, req.valido.body));
+export const liberarFotos = responder((ctx, req) => F.liberar(ctx, req.valido.body));
 
 /** Todo lo que la cuenta puede ver, con la forma de la app ({ coleccion: { id: documento } }). */
 export const sincronizar = responder(ctx => D.sincronizar(ctx));

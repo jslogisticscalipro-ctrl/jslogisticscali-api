@@ -16,6 +16,8 @@ r.delete("/papelera", permitir("admin"), C.vaciarPapelera);
 
 r.get("/respaldo/exportar", permitir("admin"), C.exportar);
 r.get("/respaldo/espacio", permitir("admin"), C.espacio);
+r.put("/respaldo/fotos/aviso", permitir("admin"), validar({ body: V.umbralFotos }), C.umbralFotos);
+r.post("/respaldo/fotos/liberar", permitir("admin"), validar({ body: V.liberarFotos }), C.liberarFotos);
 
 r.get("/sincronizar", permitir(EQUIPO, "cliente"), C.sincronizar);
 r.get("/eventos", permitir(EQUIPO, "cliente"), C.escuchar);

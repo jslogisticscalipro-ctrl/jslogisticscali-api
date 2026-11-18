@@ -106,3 +106,13 @@ export const historial = z.object({
   porPagina: z.coerce.number().int().min(1).max(100).optional()
 });
 export const nota = z.object({ texto: texto(1000) });
+
+/** Control del espacio de las fotos (solo administración). */
+export const umbralFotos = z.object({ umbral: z.coerce.number().int("Escribe un número entero").min(50, "El aviso debe ser desde 50 %").max(99, "El aviso debe ser hasta 99 %") }).strict();
+export const liberarFotos = z.object({
+  cantidad: z.coerce.number().int().min(1, "Escribe al menos 1 guía").max(2000, "Máximo 2000 guías a la vez").optional(),
+  desde: dia.optional(), hasta: dia.optional(),
+  simular: z.boolean().optional(),
+  confirmar: z.string().max(20).optional(),
+  guiasEsperadas: z.coerce.number().int().min(0).optional()
+}).strict();

@@ -71,7 +71,7 @@ export async function archivos(req, res) {
   if (!p || !puedeVer(req.usuario, p)) throw noEncontrado("La guía no existe");
   const lista = await Pedido.listarArchivos(guia, { incluirPrevias: esOficina(req.usuario) });
   const urls = await firmarUrls(lista.map(a => a.ruta));
-  res.json({ archivos: lista.filter(a => urls[a.ruta]).map(a => ({ tipo: a.tipo, url: urls[a.ruta], creado: a.creado })) });
+  res.json({ archivos: lista.filter(a => urls[a.ruta]).map(a => ({ tipo: a.tipo, url: urls[a.ruta], creado: a.creado })), borradas: !!p.fotosBorradas });
 }
 
 /** Sube una foto o firma (cuerpo binario JPEG, PNG o WebP) y la deja en el pedido.
@@ -96,7 +96,7 @@ export async function subirArchivo(req, res) {
   let archivo;
   try {
     archivo = await transaccion(async db => {
-      const a = await Pedido.agregarArchivo({ guia, tipo, ruta, por: u.id }, db);
+      const a = await Pedido.agregarArchivo({ guia, tipo, ruta, por: u.id, bytes: req.body.length }, db);
       if (tipo !== "mini") await Auditoria.registrar({ uid: u.id, accion: `Agregó ${tipo === "firma" ? "la firma" : "foto de " + tipo} a ${guia}`, tabla: "pedidos", registro: guia }, db);
       return a;
     });

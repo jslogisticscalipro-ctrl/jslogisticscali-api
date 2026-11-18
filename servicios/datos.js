@@ -8,6 +8,7 @@ import { datosInvalidos, noEncontrado } from "./errores.js";
 import { enTransaccion } from "./transaccion.js";
 import { registrar, resumenDoc } from "./historial.js";
 import { exigirAdmin, exigirEquipo, texto } from "./contexto.js";
+import { estadoFotos } from "./fotos.js";
 
 /** Qué puede leer cada rol, igual que firestore.rules + cargarDatos(). null = todo; objeto o lista = filtro. */
 export function lecturasDe(a) {
@@ -150,15 +151,10 @@ export async function exportar(ctx) {
   out.exportado = new Date().toISOString();
   return out;
 }
-/** Espacio usado: base de datos y fotos del bucket. */
+/** Espacio usado: base de datos y fotos del bucket (el detalle de las fotos y el aviso están en servicios/fotos.js). */
 export async function espacio(ctx) {
   exigirAdmin(ctx.actor);
   const db = (await ctx.db.query(`SELECT pg_database_size(current_database()) AS bytes`)).rows[0].bytes;
   const tablas = (await ctx.db.query(`SELECT relname AS tabla, pg_total_relation_size(relid) AS bytes, n_live_tup AS filas FROM pg_stat_user_tables ORDER BY 2 DESC`)).rows;
-  let fotos = null;
-  try { // en Supabase, los archivos del bucket están en storage.objects
-    fotos = (await ctx.db.query(`SELECT count(*)::int AS archivos, COALESCE(sum((metadata->>'size')::bigint), 0) AS bytes FROM storage.objects WHERE bucket_id = $1`,
-      [env.STORAGE_BUCKET])).rows[0];
-  } catch { fotos = null; }
-  return { baseDeDatos: { bytes: Number(db), tablas: tablas.map(t => ({ ...t, bytes: Number(t.bytes), filas: Number(t.filas) })) }, fotos, hoy: hoy() };
+  return { baseDeDatos: { bytes: Number(db), tablas: tablas.map(t => ({ ...t, bytes: Number(t.bytes), filas: Number(t.filas) })) }, fotos: await estadoFotos(ctx.db), hoy: hoy() };
 }

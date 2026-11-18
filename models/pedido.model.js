@@ -173,10 +173,10 @@ export async function listarArchivos(guia, { incluirPrevias = false } = {}) {
 }
 
 /** Registra una foto o firma ya subida al bucket. La vigente de cada tipo es la más reciente. */
-export async function agregarArchivo({ guia, tipo, ruta, por }, db = { query }) {
+export async function agregarArchivo({ guia, tipo, ruta, por, bytes = null }, db = { query }) {
   const { rows } = await db.query(
-    `INSERT INTO pedido_archivos (guia, tipo, ruta, por) VALUES ($1, $2, $3, $4) RETURNING id, tipo, ruta, creado`,
-    [guia, tipo, ruta, por]
+    `INSERT INTO pedido_archivos (guia, tipo, ruta, por, bytes) VALUES ($1, $2, $3, $4, $5) RETURNING id, tipo, ruta, creado`,
+    [guia, tipo, ruta, por, bytes]
   );
   return filaAObjeto(rows[0]);
 }

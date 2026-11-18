@@ -29,6 +29,8 @@ const esquema = z.object({
   SUPABASE_URL: z.string().url().optional().or(z.literal("")).transform(v => v ? v.replace(/\/$/, "") : undefined),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().transform(v => v || undefined),
   STORAGE_BUCKET: z.string().default("pedidos"),
+  // Tope de espacio de las fotos en MB (la capa gratuita de Supabase da 1 GB). Con él se calcula el porcentaje usado.
+  FOTOS_LIMITE_MB: z.coerce.number().int().positive().default(1024),
   // Correo transaccional con Resend (https://resend.com). Sin clave no se envían correos, pero la API funciona.
   RESEND_API_KEY: z.string().optional().transform(v => v || undefined),
   // Redis para la cola de correos masivos (BullMQ). Opcional: sin esto, el envío masivo corre en segundo plano en el mismo proceso.

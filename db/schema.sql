@@ -180,6 +180,14 @@ CREATE TABLE IF NOT EXISTS pedido_archivos (
   por     TEXT REFERENCES usuarios(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS pedido_archivos_guia_idx ON pedido_archivos (guia, tipo);
+-- Tamaño de cada archivo, para medir el espacio sin recorrer el bucket (Control de espacio de fotos).
+-- Los archivos anteriores a esta columna toman su tamaño de storage.objects de Supabase (si no existe ese esquema, se omite).
+ALTER TABLE pedido_archivos ADD COLUMN IF NOT EXISTS bytes BIGINT CHECK (bytes >= 0);
+DO $$ BEGIN
+  UPDATE pedido_archivos a SET bytes = (o.metadata->>'size')::bigint
+    FROM storage.objects o WHERE o.name = a.ruta AND a.bytes IS NULL AND o.metadata->>'size' IS NOT NULL;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- ---------- Dinero ----------
 
