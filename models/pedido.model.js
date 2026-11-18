@@ -16,7 +16,6 @@ const conIntentos = columnas => `
     COALESCE((SELECT json_agg(json_build_object('fecha', i.fecha, 'motivo', i.motivo, 'nota', i.nota) ORDER BY i.fecha)
               FROM pedido_intentos i WHERE i.guia = p.guia), '[]'::json) AS intentos,
     (SELECT a.ruta FROM pedido_archivos a WHERE a.guia = p.guia AND a.tipo = 'mini' ORDER BY a.creado DESC LIMIT 1) AS mini_ruta,
-    NOT EXISTS (SELECT 1 FROM pedido_archivos a WHERE a.guia = p.guia AND a.tipo = 'salida') AS sin_foto,
     -- Si la guía salió de una solicitud: dónde recoger y a quién entregar (lo necesita el mensajero para "Recoger").
     -- Solo lo ve quien puede ver la guía; no trae los datos de contacto del remitente.
     (SELECT json_build_object('direccionRecogida', s.direccion_recogida, 'direccionEntrega', s.direccion_entrega,
@@ -39,7 +38,7 @@ const limitesDia = dia => { const ini = new Date(dia + "T00:00:00-05:00"); retur
  * para que cada quien vea solo lo suyo, igual que firestore.rules.
  */
 function filtrosSql({ estado, cerrados, mensajeroId, clienteId, desde, hasta, entregadoDesde, entregadoHasta, buscar, conDiferencia, diferencia,
-  sinRemitente, cambioPendiente, sinServicio, sinFoto, dia } = {}) {
+  sinRemitente, cambioPendiente, sinServicio, dia } = {}) {
   const cond = [], valores = [];
   const agregar = (sql, v) => { valores.push(v); cond.push(sql.replace("?", `$${valores.length}`)); };
   if (estado) agregar("p.estado = ?", estado);
@@ -58,7 +57,6 @@ function filtrosSql({ estado, cerrados, mensajeroId, clienteId, desde, hasta, en
   if (conDiferencia || diferencia === "sinRevisar") cond.push("p.dif_cobro <> 0 AND NOT p.dif_revisada");
   else if (diferencia === "todas") cond.push("p.dif_cobro <> 0");
   if (sinRemitente) cond.push("p.cliente_id IS NULL");
-  if (sinFoto) cond.push(SQL_SIN_FOTO);
   if (cambioPendiente) cond.push("p.cambio AND p.cambio_recibido IS NULL");
   if (sinServicio) cond.push("p.estado = 'entregado' AND p.cliente_id IS NOT NULL AND p.valor_servicio = 0");
   if (dia) { // como delDia() de la app: salió ese día, o se entregó o devolvió ese día
@@ -69,13 +67,6 @@ function filtrosSql({ estado, cerrados, mensajeroId, clienteId, desde, hasta, en
   }
   return { cond, valores };
 }
-
-/* Guía que el mensajero (o la oficina) creó desde una foto y se quedó sin ella: por entregar, sin foto de salida, que no es
-   un reintento (esos se crean sin foto) y con más de 10 minutos, para no contar las que todavía están subiendo desde una
-   versión vieja de la app (antes la guía se creaba primero y la foto subía después). Las de una solicitud no entran: si su
-   foto falla siguen "por recoger". La oficina las borra y el mensajero vuelve a tomar la foto. */
-export const SQL_SIN_FOTO = `p.estado = 'pendiente' AND p.reintento_de IS NULL AND p.creado < now() - interval '10 minutes'
-  AND NOT EXISTS (SELECT 1 FROM pedido_archivos a WHERE a.guia = p.guia AND a.tipo = 'salida')`;
 
 const donde = cond => (cond.length ? "WHERE " + cond.join(" AND ") : "");
 

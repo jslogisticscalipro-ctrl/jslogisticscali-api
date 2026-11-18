@@ -26,7 +26,6 @@ export const listar = z.object({
   conDiferencia: bandera.optional(),                                    // diferencia de cobro sin revisar
   diferencia: z.enum(["todas", "sinRevisar"]).optional(),               // "todas" incluye las ya revisadas
   sinRemitente: bandera.optional(),
-  sinFoto: bandera.optional(),                                          // por entregar y sin foto de salida (ver SQL_SIN_FOTO)
   cambioPendiente: bandera.optional(),                                  // prenda de cambio que el cliente no ha recibido
   sinServicio: bandera.optional(),                                      // entregado, con remitente y sin valor de servicio
   dia: z.string().refine(esDia, "Usa un día con el formato AAAA-MM-DD").optional(), // salió o se cerró ese día (hora de Colombia)

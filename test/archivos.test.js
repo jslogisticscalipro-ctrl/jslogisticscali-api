@@ -171,7 +171,6 @@ test("con-foto: el mensajero crea la guía con su foto de salida, a su nombre y 
   const p = r.body.pedido;
   assert.equal(p.estado, "pendiente");
   assert.equal(p.valorServicio, 0);
-  assert.equal(p.sinFoto, false);
   const a = await mensajero.get(`/api/pedidos/${p.guia}/archivos`);
   assert.deepEqual(a.body.archivos.map(x => x.tipo), ["salida"]);
   assert.ok([...bucket.keys()].some(k => k.startsWith(p.guia + "/salida-")));
@@ -202,18 +201,4 @@ test("con-foto: la oficina elige el mensajero; sin él, o con uno que no existe,
   const r = await conFoto(admin, JPEG, "image/jpeg", "?mensajeroId=" + mid);
   assert.equal(r.status, 201);
   assert.equal(r.body.pedido.mensajeroId, mid);
-});
-
-test("sinFoto: la oficina ve las guías por entregar que se quedaron sin foto de salida", async () => {
-  const vieja = (await mensajero.post("/api/pedidos").send({})).body.pedido.guia;   // como la app vieja: guía primero, foto después
-  const reciente = (await mensajero.post("/api/pedidos").send({})).body.pedido.guia;
-  const conLaFoto = (await conFoto(mensajero)).body.pedido.guia;
-  await pool.query(`UPDATE pedidos SET creado = now() - interval '11 minutes' WHERE guia = ANY($1)`, [[vieja, conLaFoto]]);
-  const r = await admin.get("/api/pedidos?sinFoto=true&pagina=1&porPagina=100");
-  assert.equal(r.status, 200);
-  const guias = r.body.pedidos.map(p => p.guia);
-  assert.ok(guias.includes(vieja), "la que lleva más de 10 minutos sin foto aparece");
-  assert.ok(!guias.includes(reciente), "la recién creada puede estar subiendo todavía");
-  assert.ok(!guias.includes(conLaFoto), "la que tiene foto no aparece");
-  assert.ok(r.body.pedidos.every(p => p.sinFoto === true));
 });
