@@ -43,6 +43,19 @@ test("el mensajero crea guías consecutivas, a su nombre y en cero", async () =>
   assert.equal(b.body.pedido.guia, "JS-00002");
 });
 
+test("crear una guía avisa en tiempo real a la oficina (colección pedidos)", async () => {
+  const { eventos } = await import("../servicios/eventos.js");
+  const avisos = [];
+  // Se espía el aviso sin abrir la conexión SSE: la ruta llama a eventos.emitir al terminar.
+  const original = eventos.emitir;
+  eventos.emitir = (cols, meta) => { avisos.push(cols); return original.call(eventos, cols, meta); };
+  try {
+    const r = await mensajero.post("/api/pedidos").send({});
+    assert.equal(r.status, 201);
+    assert.ok(avisos.some(c => c.includes("pedidos")), "la guía nueva debe avisar a las pantallas abiertas");
+  } finally { eventos.emitir = original; }
+});
+
 test("guías creadas a la vez no repiten número", async () => {
   const rs = await Promise.all(Array.from({ length: 8 }, () => mensajero.post("/api/pedidos").send({})));
   const guias = rs.map(r => r.body.pedido.guia);

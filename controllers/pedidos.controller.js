@@ -12,6 +12,7 @@ import { noEncontrado, prohibido, invalido } from "../helpers/errores.js";
 import { VENTANA_CORRECCION_MS } from "../helpers/negocio.js";
 import * as Servicio from "../servicios/pedidos.js";
 import { ctxDe, responder } from "./accion.js";
+import { eventos } from "../servicios/eventos.js";
 import { esOficina } from "../middleware/autorizar.js";
 import { firmarUrls, subirArchivo as subirAlBucket, borrarArchivos, storageConfigurado } from "../helpers/storage.js";
 import { tipoDeImagen } from "../helpers/imagenes.js";
@@ -105,6 +106,8 @@ export async function subirArchivo(req, res) {
     throw e;
   }
   // `?sinUrl=1`: quien sube no necesita la URL (la app interna no la usa); se ahorra un viaje a Storage.
+  // Aviso en tiempo real: la oficina ve la foto (o la miniatura) sin esperar la recarga periódica.
+  eventos.emitir(["pedidos"]);
   const urls = req.query.sinUrl === "1" ? {} : await firmarUrls([ruta]).catch(() => ({}));
   res.status(201).json({ archivo: { tipo, url: urls[ruta] ?? null, creado: archivo.creado } });
 }
@@ -123,6 +126,9 @@ export async function crear(req, res) {
   }
   const p = await Pedido.crear({ ...datos, creadoPor: u.id });
   await Auditoria.registrar({ uid: u.id, accion: `Creó la guía ${p.guia}`, tabla: "pedidos", registro: p.guia });
+  // Esta ruta no pasa por enTransaccion (que avisa sola): sin este aviso, la lista de Pedidos de la oficina no se
+  // enteraba de la guía nueva del mensajero hasta la recarga periódica (5 min con el canal en tiempo real conectado).
+  eventos.emitir(["pedidos"]);
   res.status(201).json({ pedido: p });
 }
 
